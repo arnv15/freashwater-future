@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0B3C5D" />
+<title>BloomBot Tracker — Freshwater Futures</title>
+<meta name="description" content="BloomBot Tracker: live water-quality telemetry, AI bloom-risk prediction, cartridge intervention logging and multi-reservoir fleet management for the BloomGuard autonomous buoy." />
+<!-- ?v= is a cache buster: bump it after editing any asset, otherwise the
+     browser will happily keep running the previous copy. -->
+<link rel="stylesheet" href="assets/styles.css?v=5" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>" />
+</head>
+<body>
+
+<!-- ================= DESKTOP STAGE ================= -->
+<div class="stage">
+
+  <aside class="stage__aside">
+    <div class="brandmark">
+      <svg class="brandmark__logo" viewBox="0 0 120 120" aria-hidden="true"><use href="#logo-mark"/></svg>
+      <div>
+        <h1>BloomBot <span>Tracker</span></h1>
+        <p class="brandmark__sub">Freshwater Futures · Oxford Climate Challenge</p>
+      </div>
+    </div>
+
+    <p class="stage__blurb">
+      The companion app for <strong>BloomGuard</strong> — an autonomous solar buoy that senses the
+      chemistry of a reservoir, predicts a harmful algal bloom <em>before</em> it is visible,
+      releases an algicidal-bacteria cartridge, and skims the dead algae for biogas recovery.
+    </p>
+
+    <ul class="stage__features">
+      <li data-goto="sensors"><span class="dot dot--teal"></span><b>Live Sensor Dashboard</b><small>pH · DO · VOC · bloom-risk score</small></li>
+      <li data-goto="alerts"><span class="dot dot--amber"></span><b>Threshold Alerts</b><small>Push notification before a bloom surfaces</small></li>
+      <li data-goto="cartridges"><span class="dot dot--leaf"></span><b>Cartridge Log</b><small>Deployments, retrieval, remaining capacity</small></li>
+      <li data-goto="fleet"><span class="dot dot--coral"></span><b>Fleet View</b><small>Every buoy across every reservoir</small></li>
+    </ul>
+
+    <div class="stage__hint">
+      <kbd>←</kbd> <kbd>→</kbd> to move between tabs · <kbd>D</kbd> toggles demo speed
+    </div>
+  </aside>
+
+  <div class="stage__device">
+    <!-- ================= iPHONE ================= -->
+    <div class="device" id="device">
+      <div class="device__buttons" aria-hidden="true">
+        <i class="btn-silent"></i><i class="btn-vol"></i><i class="btn-vol"></i><i class="btn-power"></i>
+      </div>
+      <div class="device__frame">
+        <div class="device__bezel">
+          <div class="device__island" aria-hidden="true"></div>
+
+          <div class="device__screen">
+            <!-- status bar -->
+            <div class="statusbar" id="statusbar">
+              <span class="statusbar__time" id="clock">9:41</span>
+              <span class="statusbar__right">
+                <svg viewBox="0 0 20 14" class="ic-sb"><use href="#ic-signal"/></svg>
+                <svg viewBox="0 0 18 14" class="ic-sb"><use href="#ic-wifi"/></svg>
+                <svg viewBox="0 0 28 14" class="ic-sb ic-sb--bat"><use href="#ic-battery"/></svg>
+              </span>
+            </div>
+
+            <!-- app root -->
+            <div class="app" id="app"></div>
+
+            <!-- in-phone toast / push notification -->
+            <div class="pushwrap" id="pushwrap" aria-live="polite"></div>
+
+            <!-- side menu -->
+            <div class="drawer" id="drawer" hidden>
+              <div class="drawer__scrim" data-action="close-drawer"></div>
+              <nav class="drawer__panel">
+                <div class="drawer__head">
+                  <svg class="drawer__logo" viewBox="0 0 120 120"><use href="#logo-mark"/></svg>
+                  <div>
+                    <b id="drawerUser">Field Ops</b>
+                    <small id="drawerOrg">Toledo Water Authority</small>
+                  </div>
+                </div>
+                <a data-goto="home"><svg viewBox="0 0 24 24"><use href="#ic-home"/></svg>Home</a>
+                <a data-goto="sensors"><svg viewBox="0 0 24 24"><use href="#ic-wave"/></svg>Live Sensors</a>
+                <a data-goto="analytics"><svg viewBox="0 0 24 24"><use href="#ic-chart"/></svg>Analytics</a>
+                <a data-goto="fleet"><svg viewBox="0 0 24 24"><use href="#ic-pin"/></svg>Fleet View</a>
+                <a data-goto="alerts"><svg viewBox="0 0 24 24"><use href="#ic-bell"/></svg>Alerts</a>
+                <a data-goto="cartridges"><svg viewBox="0 0 24 24"><use href="#ic-cartridge"/></svg>Cartridge Log</a>
+                <a data-goto="harvest"><svg viewBox="0 0 24 24"><use href="#ic-leaf"/></svg>Harvest &amp; Biogas</a>
+                <a data-goto="profile"><svg viewBox="0 0 24 24"><use href="#ic-user"/></svg>Profile</a>
+                <div class="drawer__foot">
+                  <button class="drawer__logout" data-action="logout">Sign out</button>
+                  <span>BloomBot 1.0 · build 2026.08</span>
+                </div>
+              </nav>
+            </div>
+
+            <div class="device__home" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= SVG SPRITE ================= -->
+<svg style="display:none" aria-hidden="true">
+  <defs>
+    <linearGradient id="gWave" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3FB6D3"/><stop offset="1" stop-color="#1B6CA8"/>
+    </linearGradient>
+    <linearGradient id="gLeaf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6FBE4A"/><stop offset="1" stop-color="#2C7A3F"/>
+    </linearGradient>
+    <linearGradient id="gLake" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8FCFE4"/><stop offset="1" stop-color="#4E9EC4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- brand mark: leaves + wave + fish -->
+  <symbol id="logo-mark" viewBox="0 0 120 120">
+    <!-- outer wave sweep -->
+    <path d="M79 32.6 A34 34 0 1 1 30.1 50.4" fill="none" stroke="url(#gWave)"
+          stroke-width="12" stroke-linecap="round"/>
+    <!-- inner wave sweep -->
+    <path d="M79.3 52 A20 20 0 1 1 42.3 65.5" fill="none" stroke="#63C5DA"
+          stroke-width="8" stroke-linecap="round"/>
+    <!-- leaf sprig filling the gap at the top -->
+    <path d="M50 50 C50 42 52 34 57 27" fill="none" stroke="#2C7A3F" stroke-width="3.4" stroke-linecap="round"/>
+    <g transform="translate(50,48)">
+      <path transform="rotate(-42) scale(.92)" d="M0 0C-8-7-8-20 0-28 8-20 8-7 0 0Z" fill="#2C7A3F"/>
+      <path transform="rotate(-8)"            d="M0 0C-8-7-8-20 0-28 8-20 8-7 0 0Z" fill="#4E9A3E"/>
+      <path transform="rotate(28) scale(.88)" d="M0 0C-8-7-8-20 0-28 8-20 8-7 0 0Z" fill="#7BC24E"/>
+    </g>
+    <!-- fish -->
+    <g transform="translate(26,88)">
+      <path d="M0 0C5-8 17-8 22 0 17 8 5 8 0 0Z" fill="#E8562A"/>
+      <path d="M22 0 32-7 30 0 32 7Z" fill="#E8562A"/>
+      <path d="M11-6 13-11 16-6Z" fill="#C9431E"/>
+      <circle cx="6" cy="-1.4" r="1.9" fill="#fff"/>
+    </g>
+  </symbol>
+
+  <symbol id="ic-home" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3.2 3 10.4V21h6v-6h6v6h6V10.4L12 3.2Z"/></symbol>
+  <symbol id="ic-chart" viewBox="0 0 24 24"><path fill="currentColor" d="M4 20V9h4v11H4Zm6 0V4h4v16h-4Zm6 0v-7h4v7h-4Z"/></symbol>
+  <symbol id="ic-pin" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5.3 7 13 7 13s7-7.7 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z"/></symbol>
+  <symbol id="ic-bell" viewBox="0 0 24 24"><path fill="currentColor" d="M12 22a2.4 2.4 0 0 0 2.4-2.4H9.6A2.4 2.4 0 0 0 12 22Zm7-5.6V11a7 7 0 0 0-5.2-6.8V3.4a1.8 1.8 0 1 0-3.6 0v.8A7 7 0 0 0 5 11v5.4L3.2 18.2V19h17.6v-.8L19 16.4Z"/></symbol>
+  <symbol id="ic-user" viewBox="0 0 24 24"><path fill="currentColor" d="M12 12a4.6 4.6 0 1 0 0-9.2A4.6 4.6 0 0 0 12 12Zm0 2.2c-4 0-8 2-8 4.6V21h16v-2.2c0-2.6-4-4.6-8-4.6Z"/></symbol>
+  <symbol id="ic-wave" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M2 8c2.5-2.4 4.5-2.4 7 0s4.5 2.4 7 0 4.5-2.4 6 0M2 14c2.5-2.4 4.5-2.4 7 0s4.5 2.4 7 0 4.5-2.4 6 0M2 20c2.5-2.4 4.5-2.4 7 0"/></symbol>
+  <symbol id="ic-cartridge" viewBox="0 0 24 24"><path fill="currentColor" d="M9 2h6v3H9V2Zm-1 4h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Zm1 4v3h6v-3H9Z"/></symbol>
+  <symbol id="ic-leaf" viewBox="0 0 24 24"><path fill="currentColor" d="M20 3C9 3 4 8 4 15c0 2 .6 3.6 1.6 4.9L4 21.5 5.4 23l1.7-1.7A7.6 7.6 0 0 0 12 23c7 0 8-9 8-20Zm-3.5 5.2C14 12 10.6 15 7.2 17.6 8 11 11.6 9 16.5 8.2Z"/></symbol>
+  <symbol id="ic-menu" viewBox="0 0 24 24"><path fill="currentColor" d="M3 6h18v2.2H3V6Zm0 4.9h18v2.2H3v-2.2ZM3 15.8h18V18H3v-2.2Z"/></symbol>
+  <symbol id="ic-chev" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m9 5 7 7-7 7"/></symbol>
+  <symbol id="ic-back" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m15 5-7 7 7 7"/></symbol>
+  <symbol id="ic-search" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14Zm5.2 12.2L21 21"/></symbol>
+  <symbol id="ic-lock" viewBox="0 0 24 24"><path fill="currentColor" d="M17 9h-1V7a4 4 0 1 0-8 0v2H7a1.6 1.6 0 0 0-1.6 1.6v9A1.6 1.6 0 0 0 7 21.2h10a1.6 1.6 0 0 0 1.6-1.6v-9A1.6 1.6 0 0 0 17 9Zm-7-2a2 2 0 1 1 4 0v2h-4V7Z"/></symbol>
+  <symbol id="ic-mail" viewBox="0 0 24 24"><path fill="currentColor" d="M4 5h16a1.6 1.6 0 0 1 1.6 1.6v10.8A1.6 1.6 0 0 1 20 19H4a1.6 1.6 0 0 1-1.6-1.6V6.6A1.6 1.6 0 0 1 4 5Zm8 7.4 7.6-5H4.4l7.6 5Z"/></symbol>
+  <symbol id="ic-bolt" viewBox="0 0 24 24"><path fill="currentColor" d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></symbol>
+  <symbol id="ic-drop" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.5S5 10.4 5 14.7a7 7 0 1 0 14 0C19 10.4 12 2.5 12 2.5Z"/></symbol>
+  <symbol id="ic-flask" viewBox="0 0 24 24"><path fill="currentColor" d="M9 2h6v2h-1v5.2l5.3 9.2A2 2 0 0 1 17.6 21H6.4a2 2 0 0 1-1.7-2.6L10 9.2V4H9V2Zm-.6 13h7.2L14 11H10l-1.6 4Z"/></symbol>
+  <symbol id="ic-sun" viewBox="0 0 24 24"><path fill="currentColor" d="M12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0-6 1.6 3.4h-3.2L12 1Zm0 22-1.6-3.4h3.2L12 23ZM1 12l3.4-1.6v3.2L1 12Zm22 0-3.4 1.6v-3.2L23 12ZM4.2 4.2l3.6 1-2.6 2.6-1-3.6Zm15.6 15.6-3.6-1 2.6-2.6 1 3.6Zm0-15.6-1 3.6-2.6-2.6 3.6-1ZM4.2 19.8l1-3.6 2.6 2.6-3.6 1Z"/></symbol>
+  <symbol id="ic-warn" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 1 21h22L12 2Zm-1.1 7h2.2v6h-2.2V9Zm0 8h2.2v2.2h-2.2V17Z"/></symbol>
+  <symbol id="ic-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="m4 12.5 5.2 5.2L20 7"/></symbol>
+  <symbol id="ic-refresh" viewBox="0 0 24 24"><path fill="currentColor" d="M12 5V2L7.5 6.5 12 11V8a5 5 0 1 1-5 5H4a8 8 0 1 0 8-8Z"/></symbol>
+  <symbol id="ic-signal" viewBox="0 0 20 14"><path fill="currentColor" d="M1 10h2.4v3.2H1V10Zm4.4-2.6h2.4v5.8H5.4V7.4Zm4.4-2.8h2.4v8.6H9.8V4.6Zm4.4-3h2.4v11.6h-2.4V1.6Z"/></symbol>
+  <symbol id="ic-wifi" viewBox="0 0 18 14"><path fill="currentColor" d="M9 12.6 11.2 10a3.2 3.2 0 0 0-4.4 0L9 12.6ZM4.6 7.8a6.6 6.6 0 0 1 8.8 0l1.6-1.9a9 9 0 0 0-12 0l1.6 1.9ZM9 .9a12 12 0 0 0-8.4 3.4l1.6 1.8a9.6 9.6 0 0 1 13.6 0l1.6-1.8A12 12 0 0 0 9 .9Z"/></symbol>
+  <symbol id="ic-battery" viewBox="0 0 28 14"><rect x="1" y="2" width="22" height="10" rx="3" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.2"/><rect x="2.6" y="3.6" width="17" height="6.8" rx="1.8" fill="currentColor"/><path fill="currentColor" fill-opacity=".45" d="M24.6 5.2c1.2.3 1.8 1 1.8 1.8s-.6 1.5-1.8 1.8V5.2Z"/></symbol>
+</svg>
+
+<script src="assets/data.js?v=5"></script>
+<script src="assets/app.js?v=5"></script>
+</body>
+</html>
