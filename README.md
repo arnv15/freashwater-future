@@ -1,6 +1,6 @@
 # freashwater-future
 
-**BloomBot Tracker** — the companion web app for **BloomGuard**, an autonomous solar buoy that
+**Freshwater Future Tracker** — the companion web app for **BloomGuard**, an autonomous solar buoy that
 detects harmful algal blooms before they are visible, releases an algicidal-bacteria cartridge,
 and skims the dead algae for biogas recovery.
 

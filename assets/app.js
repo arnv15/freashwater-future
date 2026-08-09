@@ -1,5 +1,5 @@
 /* ============================================================
-   BloomBot Tracker — app shell, screens, live simulation
+   Freshwater Future Tracker — app shell, screens, live simulation
    ============================================================ */
 (function () {
 'use strict';
@@ -230,7 +230,7 @@ function ScreenLogin(){
 
     <div class="login__top">
       <svg class="login__logo" viewBox="0 0 120 120"><use href="#logo-mark"/></svg>
-      <h1 class="login__title">BloomBot</h1>
+      <h1 class="login__title">Freshwater<span>Future</span></h1>
       <p class="login__sub">Tracker App</p>
 
       <form class="login__fields" id="loginForm" autocomplete="on">
@@ -288,7 +288,7 @@ function ScreenHome(){
 
     <div class="devrow">
       <span class="devrow__ic">${ic('ic-wave')}</span>
-      <span>BloomBot 1.0</span>
+      <span>Freshwater Future 1.0</span>
       <span class="devrow__status"><span class="livedot"></span>Online</span>
     </div>
 
@@ -319,7 +319,7 @@ function ScreenHome(){
       </div>
       <div class="feed__body">
         <h4>Half Done!</h4>
-        <p>Your BloomBot has successfully dispensed half of the algicide in its tank.</p>
+        <p>Your buoy has successfully dispensed half of the algicide in its tank.</p>
         <div style="margin-top:6px"><div class="prog prog--leaf"><div class="prog__fill" style="width:52%"></div></div></div>
         <span class="feed__chip">${cart} cartridges on board</span>
         <span class="feed__cta">Check the Data! ${ic('ic-chev')}</span>
@@ -342,7 +342,7 @@ function ScreenHome(){
       </div>
       <div class="feed__body">
         <h4>Make Friends!</h4>
-        <p>Check out other BloomBots in your fleet. Compare basins and share intervention outcomes.</p>
+        <p>Check out other Freshwater Future buoys in your fleet. Compare basins and share intervention outcomes.</p>
         <span class="feed__chip">${BB.FLEET.length} buoys · ${new Set(BB.FLEET.map(f => f.org)).size} operators</span>
         <span class="feed__cta">Search ${ic('ic-search')}</span>
       </div>
@@ -526,76 +526,103 @@ function ScreenAnalytics(){
 }
 
 /* ============================================================
-   SCREEN — FLEET
+   SCREEN — FLEET  (world map)
    ------------------------------------------------------------
-   These six buoys sit in six unconnected water bodies on two
-   continents, so a single geographic map at phone width would be
-   both unreadable and misleading. Each basin gets its own small
-   plan view instead: the blue shape is the water, the marker is
-   the buoy sitting in it.
+   Equirectangular world map. Coastlines and buoy markers share one
+   projection (BB.projX / BB.projY) so every pin sits at its true
+   lat/lon. Working in degree units keeps that verifiable: a marker
+   at x=96.8 IS longitude -83.2.
+
+   Ohio, New York and Kansas fall within a few degrees of each other,
+   so at phone width their markers would sit on top of one another.
+   A relaxation pass nudges overlapping markers apart and draws a
+   leader line back to the true position — the anchor dot stays
+   accurate, only the label-bearing marker moves.
    ============================================================ */
-const BASIN_SHAPES = [
-  /* long open bay */
-  'M4 38C10 26 26 20 46 20 66 20 86 24 96 30 99 34 94 40 82 45 66 49 44 52 26 50 12 48 2 44 4 38Z',
-  /* broad round lake */
-  'M14 30C20 14 44 8 64 14 84 20 92 36 84 48 74 60 46 62 30 54 18 48 10 40 14 30Z',
-  /* branched / dendritic */
-  'M8 22C16 16 26 20 34 28 40 34 46 36 54 32 64 27 78 22 90 28 98 32 96 42 86 46 74 51 60 46 50 44 40 42 30 48 20 46 8 44 2 30 8 22Z',
-  /* crescent around a headland */
-  'M12 26C24 12 52 10 70 20 82 27 84 40 74 48 66 54 56 52 58 44 60 34 48 26 34 28 24 30 18 38 20 46 10 42 6 33 12 26Z',
-  /* wide shallow reservoir */
-  'M6 34C18 24 34 22 50 24 66 26 84 22 94 30 100 36 92 46 74 50 54 55 30 54 16 48 6 44 2 38 6 34Z',
-  /* small compact reservoir */
-  'M30 24C40 14 60 14 70 24 78 32 76 46 64 50 52 54 36 51 30 42 26 36 26 30 30 24Z'
-];
+const MAP_VB = { x:6, y:6, w:354, h:148 };   /* lon -174..180, lat 84..-64 */
+const PIN_MIN_SEP = 11;                       /* degrees between markers */
 
-/* Short coordinate — the tile is ~130px wide, the full-precision form wraps. */
-function shortCoord(lat, lon){
-  return Math.abs(lat).toFixed(1) + '° ' + (lat >= 0 ? 'N' : 'S') + ', ' +
-         Math.abs(lon).toFixed(1) + '° ' + (lon >= 0 ? 'E' : 'W');
+function layoutPins(rows){
+  const pins = rows.map(({ b, risk, band }) => ({
+    id:b.id, name:b.name, risk, band,
+    x:BB.projX(b.lon), y:BB.projY(b.lat),
+    mx:BB.projX(b.lon), my:BB.projY(b.lat)
+  }));
+
+  for (let iter = 0; iter < 200; iter++){
+    let moved = false;
+    for (let i = 0; i < pins.length; i++){
+      for (let j = i + 1; j < pins.length; j++){
+        const a = pins[i], c = pins[j];
+        let dx = c.mx - a.mx, dy = c.my - a.my;
+        let d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 0.001){ dx = 0.6; dy = 0.4; d = 0.72; }   /* exact overlap: break the tie */
+        if (d < PIN_MIN_SEP){
+          const push = (PIN_MIN_SEP - d) / 2 * 0.8;
+          dx /= d; dy /= d;
+          a.mx -= dx * push; a.my -= dy * push;
+          c.mx += dx * push; c.my += dy * push;
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+
+  /* keep markers inside the visible frame */
+  pins.forEach(p => {
+    p.mx = Math.max(MAP_VB.x + 7, Math.min(MAP_VB.x + MAP_VB.w - 7, p.mx));
+    p.my = Math.max(MAP_VB.y + 7, Math.min(MAP_VB.y + MAP_VB.h - 7, p.my));
+  });
+  return pins;
 }
 
-/* One basin: terrain behind, water in front, buoy marker in the water.
-   The gradient is declared inside each tile — a url(#id) reference into
-   the hidden sprite SVG does not resolve, so the fill silently vanishes. */
-function basinTile(b, risk, band, i){
-  const shape = BASIN_SHAPES[i % BASIN_SHAPES.length];
-  const hot   = band.key === 'crit' || band.key === 'high';
-  const gid   = 'lake' + b.id.replace(/\W/g, '');
-  return `<button class="basin ${b.id === state.buoyId ? 'is-sel' : ''}" data-buoy="${b.id}">
-    <span class="basin__map">
-      <svg viewBox="0 0 100 70" aria-hidden="true">
-        <defs>
-          <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="#8FCFE4"/><stop offset="1" stop-color="#3E8FB8"/>
-          </linearGradient>
-          <clipPath id="${gid}c"><path d="${shape}"/></clipPath>
-        </defs>
-        <rect width="100" height="70" fill="#EDF0E3"/>
-        <path d="M0 7C16 5 26 11 42 9 58 7 76 3 100 7L100 0 0 0Z" fill="#E1E9CF"/>
-        <path d="M0 61C18 57 30 65 48 63 66 61 82 67 100 63L100 70 0 70Z" fill="#E1E9CF"/>
-        <path d="${shape}" fill="url(#${gid})"/>
-        <g clip-path="url(#${gid}c)" opacity=".5">
-          <path d="M-4 30C10 26 20 32 34 30 48 28 62 24 78 28 90 31 98 30 104 28"
-                fill="none" stroke="#fff" stroke-width="1.1"/>
-          <path d="M-4 42C10 38 22 44 36 42 50 40 66 37 80 41 92 44 100 42 104 40"
-                fill="none" stroke="#fff" stroke-width="1.1"/>
-        </g>
-        <path d="${shape}" fill="none" stroke="#5E9FBE" stroke-width="1.4"/>
-        ${hot ? `<circle class="map__ping" cx="50" cy="36" r="5" fill="${band.color}"/>` : ''}
-        <circle cx="50" cy="36" r="8.5" fill="${band.color}" opacity=".25"/>
-        <circle cx="50" cy="36" r="5.4" fill="#fff"/>
-        <circle cx="50" cy="36" r="3.3" fill="${band.color}"/>
-      </svg>
-    </span>
-    <span class="basin__foot">
-      <span class="basin__name">${esc(b.name)}</span>
-      <span class="basin__risk" style="color:${band.color}">${risk}</span>
-    </span>
-    <span class="basin__coord">${esc(b.id)} · ${shortCoord(b.lat, b.lon)}</span>
-  </button>`;
+function worldMap(rows){
+  const land = BB.LANDMASSES.map(ring =>
+    `<path d="${ring.map((p, i) => (i ? 'L' : 'M') + BB.projX(p[0]).toFixed(1) + ' ' + BB.projY(p[1]).toFixed(1)).join(' ')}Z"/>`
+  ).join('');
+
+  let grat = '';
+  for (let lon = -150; lon <= 150; lon += 30){
+    grat += `<line x1="${BB.projX(lon)}" y1="0" x2="${BB.projX(lon)}" y2="180"/>`;
+  }
+  for (let lat = -60; lat <= 60; lat += 30){
+    grat += `<line x1="0" y1="${BB.projY(lat)}" x2="360" y2="${BB.projY(lat)}"/>`;
+  }
+
+  const pins = layoutPins(rows).map(p => {
+    const off = Math.sqrt((p.mx - p.x) ** 2 + (p.my - p.y) ** 2) > 1.5;
+    const hot = p.band.key === 'crit' || p.band.key === 'high';
+    return `<g class="wm-pin" data-pin="${p.id}" role="button" tabindex="0"
+               aria-label="${esc(p.name)}, bloom risk ${p.risk}">
+      <title>${esc(p.name)} — risk ${p.risk}</title>
+      ${off ? `<line class="wm-lead" x1="${p.x.toFixed(1)}" y1="${p.y.toFixed(1)}"
+                     x2="${p.mx.toFixed(1)}" y2="${p.my.toFixed(1)}" stroke="${p.band.color}"/>
+               <circle class="wm-anchor" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="1.3" fill="${p.band.color}"/>` : ''}
+      ${hot ? `<circle class="wm-ping" cx="${p.mx.toFixed(1)}" cy="${p.my.toFixed(1)}" r="4.5" fill="${p.band.color}"/>` : ''}
+      <circle class="wm-halo" cx="${p.mx.toFixed(1)}" cy="${p.my.toFixed(1)}" r="6" fill="#fff"/>
+      <circle cx="${p.mx.toFixed(1)}" cy="${p.my.toFixed(1)}" r="4.3" fill="${p.band.color}"/>
+      <circle cx="${p.mx.toFixed(1)}" cy="${p.my.toFixed(1)}" r="1.6" fill="#fff"/>
+      <circle cx="${p.mx.toFixed(1)}" cy="${p.my.toFixed(1)}" r="10" fill="transparent"/>
+    </g>`;
+  }).join('');
+
+  return `<div class="worldmap">
+    <svg viewBox="${MAP_VB.x} ${MAP_VB.y} ${MAP_VB.w} ${MAP_VB.h}" role="img"
+         aria-label="World map of ${rows.length} monitoring buoys">
+      <rect x="0" y="0" width="360" height="180" fill="#CFE4EF"/>
+      <g class="wm-grat">${grat}</g>
+      <line class="wm-eq" x1="0" y1="90" x2="360" y2="90"/>
+      <g class="wm-land">${land}</g>
+      ${pins}
+    </svg>
+  </div>
+  <p class="worldmap__hint">Tap a marker for buoy details · markers offset where basins overlap</p>`;
 }
 
+/* ============================================================
+   SCREEN — FLEET
+   ============================================================ */
 function ScreenFleet(){
   const rows = BB.FLEET.map(b => {
     const risk = riskOf(b.id), band = BB.riskBand(risk);
@@ -608,10 +635,7 @@ function ScreenFleet(){
       <p>${BB.FLEET.length} buoys across ${new Set(BB.FLEET.map(f => f.org)).size} operators. Sorted by bloom risk.</p>
     </div>
 
-    <div class="sec-label">Basins at a glance</div>
-    <div class="basins">
-      ${rows.map(({ b, risk, band }, i) => basinTile(b, risk, band, i)).join('')}
-    </div>
+    ${worldMap(rows)}
     <div class="risk-key">
       <span><i style="background:#3FA34D"></i>Low</span>
       <span><i style="background:#F0A32E"></i>Elevated</span>
@@ -878,7 +902,7 @@ function ScreenProfile(){
       <div class="kv"><span>Organisation</span><b>${esc(state.user.org)}</b></div>
       <div class="kv"><span>Role</span><b>Operations lead</b></div>
       <div class="kv"><span>Fleet access</span><b>All ${BB.FLEET.length} buoys</b></div>
-      <div class="kv"><span>App version</span><b>BloomBot 1.0</b></div>
+      <div class="kv"><span>App version</span><b>Freshwater Future 1.0</b></div>
     </div>
 
     <div class="btnrow" style="grid-template-columns:1fr">
@@ -915,6 +939,7 @@ function go(scr){
   if (!SCREENS[scr]) return;
   state.screen = scr;
   closeDrawer();
+  if (!$('#sheet').hidden) $('#sheet').hidden = true;
   render();
 }
 
@@ -1076,7 +1101,7 @@ function pushNotify(title, body, goto){
   el.innerHTML = `
     <span class="push__app"><svg viewBox="0 0 120 120"><use href="#logo-mark"/></svg></span>
     <div>
-      <div class="push__head"><b>BloomBot Tracker</b><time>now</time></div>
+      <div class="push__head"><b>Freshwater Future Tracker</b><time>now</time></div>
       <p>${esc(title)}<br><span style="color:var(--muted)">${esc(body)}</span></p>
     </div>`;
   if (goto) el.addEventListener('click', () => { go(goto); dismiss(el); });
@@ -1090,7 +1115,7 @@ function pushNotify(title, body, goto){
   /* mirror to the OS if the user has granted permission */
   try {
     if ('Notification' in window && Notification.permission === 'granted'){
-      new Notification('BloomBot Tracker — ' + title, { body: body, tag: 'bloombot' });
+      new Notification('Freshwater Future Tracker — ' + title, { body: body, tag: 'freshwater-future' });
     }
   } catch (e) { /* notifications unavailable — the in-app banner still shows */ }
 }
@@ -1199,6 +1224,68 @@ function cycleBuoy(){
   render();
 }
 
+/* ============================================================
+   BUOY DETAIL SHEET  (tap a map marker)
+   ============================================================ */
+function openSheet(id){
+  const b = buoy(id);
+  if (!b) return;
+  const r = readings(id), risk = riskOf(id), band = BB.riskBand(risk);
+  const loaded = state.cartridges.filter(c => c.buoy === id && c.state === 'loaded').length;
+  const pending = state.cartridges.filter(c => c.buoy === id && c.state === 'spent').length;
+
+  $('#sheetPanel').innerHTML = `
+    <div class="sheet__grab"></div>
+    <button class="sheet__x" data-action="close-sheet" aria-label="Close">&times;</button>
+
+    <div class="sheet__head">
+      <span class="sheet__ic" style="background:${band.color}">${ic('ic-wave')}</span>
+      <div class="sheet__id">
+        <b>${esc(b.name)}</b>
+        <small>${esc(b.id)} · ${esc(b.water)}</small>
+      </div>
+      <div class="sheet__risk">
+        <span style="color:${band.color}">${risk}</span>
+        <small>${band.label}</small>
+      </div>
+    </div>
+
+    <div class="sheet__coord">${ic('ic-pin')}${BB.coord(b.lat, b.lon)}</div>
+
+    <div class="sheet__grid">
+      <div><b>${BB.fmt('ph', r.ph)}</b><small>pH</small></div>
+      <div><b>${BB.fmt('do', r.do)}</b><small>DO mg/L</small></div>
+      <div><b>${BB.fmt('voc', r.voc)}</b><small>AVOC ppb</small></div>
+      <div><b>${b.battery}%</b><small>Battery</small></div>
+      <div><b>${b.cartridges}</b><small>Cartridges</small></div>
+      <div><b>${b.tank}%</b><small>Tank</small></div>
+    </div>
+
+    <div class="sheet__meta">
+      <span>Operator <b>${esc(b.org)}</b></span>
+      <span>Deployed <b>${esc(b.deployed)}</b></span>
+      ${pending ? `<span>Awaiting retrieval <b>${pending}</b></span>` : ''}
+      ${loaded ? `<span>Ready to load <b>${loaded}</b></span>` : ''}
+    </div>
+
+    <div class="sheet__acts">
+      <button class="actionbtn actionbtn--solid" data-action="sheet-open-buoy" data-buoy-id="${b.id}">
+        ${ic('ic-wave')} Live dashboard
+      </button>
+      <button class="actionbtn" data-action="close-sheet">Back to map</button>
+    </div>`;
+
+  $('#sheet').hidden = false;
+}
+
+function closeSheet(){
+  const s = $('#sheet');
+  if (s.hidden) return;
+  const panel = $('#sheetPanel');
+  panel.classList.add('is-out');
+  setTimeout(() => { panel.classList.remove('is-out'); s.hidden = true; }, 220);
+}
+
 function openDrawer(){
   $('#drawerUser').textContent = state.user.name;
   $('#drawerOrg').textContent  = state.user.org;
@@ -1253,6 +1340,10 @@ document.addEventListener('click', e => {
     return;
   }
 
+  /* map marker -> detail sheet (does not navigate) */
+  const pinEl = t.closest('[data-pin]');
+  if (pinEl){ openSheet(pinEl.getAttribute('data-pin')); return; }
+
   const buoyEl = t.closest('[data-buoy]');
   if (buoyEl){
     state.buoyId = buoyEl.getAttribute('data-buoy');
@@ -1285,6 +1376,12 @@ document.addEventListener('click', e => {
     case 'logout':       logout(); break;
     case 'open-drawer':  openDrawer(); break;
     case 'close-drawer': closeDrawer(); break;
+    case 'close-sheet':  closeSheet(); break;
+    case 'sheet-open-buoy':
+      state.buoyId = actEl.getAttribute('data-buoy-id');
+      closeSheet();
+      go('sensors');
+      break;
     case 'cycle-buoy':   cycleBuoy(); break;
     case 'refresh':      render(); break;
     case 'deploy':       doDeploy(buoy(), false); break;
@@ -1346,7 +1443,13 @@ document.addEventListener('keydown', e => {
   const tgt = e.target;
   if (tgt && typeof tgt.matches === 'function' && tgt.matches('input')) return;
 
-  if (e.key === 'Escape'){ closeDrawer(); return; }
+  if (e.key === 'Escape'){ closeSheet(); closeDrawer(); return; }
+  /* keyboard activation for map markers */
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('[data-pin]')){
+    e.preventDefault();
+    openSheet(e.target.closest('[data-pin]').getAttribute('data-pin'));
+    return;
+  }
   if (e.key === 'ArrowRight' || e.key === 'ArrowLeft'){
     const cur = TAB_ORDER.indexOf(state.screen);
     const base = cur === -1 ? 0 : cur;
