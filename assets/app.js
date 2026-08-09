@@ -192,8 +192,8 @@ function tabbar(active){
     </button>`).join('')}</nav>`;
 }
 
-function shell(bar, body, active, flush){
-  return bar + `<div class="view ${flush ? 'view--flush' : ''}" id="view">${body}</div>` + tabbar(active);
+function shell(bar, body, active, viewClass){
+  return bar + `<div class="view ${viewClass || ''}" id="view">${body}</div>` + tabbar(active);
 }
 
 function barBrand(){
@@ -539,7 +539,13 @@ function ScreenAnalytics(){
    leader line back to the true position — the anchor dot stays
    accurate, only the label-bearing marker moves.
    ============================================================ */
-const MAP_VB = { x:6, y:6, w:354, h:148 };   /* lon -174..180, lat 84..-64 */
+/* Framed to lon -150..150: the widest-apart buoys are Clear Lake (-122.8)
+   and Lake Chaohu (117.6), so this crops empty Pacific without losing any
+   marker, and buys ~16% more scale on a portrait screen.
+   An undistorted world map can never fill a tall phone screen — markers
+   240° apart force a wide aspect — so the surrounding ocean is styled
+   rather than fought. */
+const MAP_VB = { x:30, y:6, w:300, h:168 };  /* lon -150..150, lat 84..-84 */
 const PIN_MIN_SEP = 11;                       /* degrees between markers */
 
 function layoutPins(rows){
@@ -582,12 +588,16 @@ function worldMap(rows){
     `<path d="${ring.map((p, i) => (i ? 'L' : 'M') + BB.projX(p[0]).toFixed(1) + ' ' + BB.projY(p[1]).toFixed(1)).join(' ')}Z"/>`
   ).join('');
 
+  /* The SVG scales to fit width, so on a portrait screen the viewBox band
+     sits in the middle of a much taller viewport. Ocean and graticule are
+     drawn well past the viewBox so they still reach the top and bottom
+     edges; only the land and pins stay inside real map bounds. */
   let grat = '';
   for (let lon = -150; lon <= 150; lon += 30){
-    grat += `<line x1="${BB.projX(lon)}" y1="0" x2="${BB.projX(lon)}" y2="180"/>`;
+    grat += `<line x1="${BB.projX(lon)}" y1="-400" x2="${BB.projX(lon)}" y2="580"/>`;
   }
   for (let lat = -60; lat <= 60; lat += 30){
-    grat += `<line x1="0" y1="${BB.projY(lat)}" x2="360" y2="${BB.projY(lat)}"/>`;
+    grat += `<line x1="-400" y1="${BB.projY(lat)}" x2="760" y2="${BB.projY(lat)}"/>`;
   }
 
   const pins = layoutPins(rows).map(p => {
@@ -609,15 +619,33 @@ function worldMap(rows){
 
   return `<div class="worldmap">
     <svg viewBox="${MAP_VB.x} ${MAP_VB.y} ${MAP_VB.w} ${MAP_VB.h}" role="img"
+         preserveAspectRatio="xMidYMid meet"
          aria-label="World map of ${rows.length} monitoring buoys">
-      <rect x="0" y="0" width="360" height="180" fill="#CFE4EF"/>
+      <defs>
+        <linearGradient id="wmOcean" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0"   stop-color="#9FC4D8"/>
+          <stop offset=".36" stop-color="#CFE4EF"/>
+          <stop offset=".64" stop-color="#CFE4EF"/>
+          <stop offset="1"   stop-color="#9FC4D8"/>
+        </linearGradient>
+      </defs>
+      <rect x="-400" y="-400" width="1160" height="980" fill="url(#wmOcean)"/>
       <g class="wm-grat">${grat}</g>
-      <line class="wm-eq" x1="0" y1="90" x2="360" y2="90"/>
+      <line class="wm-eq" x1="-400" y1="90" x2="760" y2="90"/>
       <g class="wm-land">${land}</g>
       ${pins}
     </svg>
-  </div>
-  <p class="worldmap__hint">Tap a marker for buoy details · markers offset where basins overlap</p>`;
+
+    <p class="map-hint">Tap a marker for buoy details</p>
+
+    <div class="map-legend">
+      <b>Bloom risk</b>
+      <span><i style="background:#3FA34D"></i>Low</span>
+      <span><i style="background:#F0A32E"></i>Elevated</span>
+      <span><i style="background:#E8562A"></i>High</span>
+      <span><i style="background:#DE3B3B"></i>Critical</span>
+    </div>
+  </div>`;
 }
 
 /* ============================================================
@@ -625,49 +653,11 @@ function worldMap(rows){
    ============================================================ */
 function ScreenFleet(){
   const rows = BB.FLEET.map(b => {
-    const risk = riskOf(b.id), band = BB.riskBand(risk);
-    return { b, risk, band };
+    const risk = riskOf(b.id);
+    return { b, risk, band: BB.riskBand(risk) };
   }).sort((x, y) => y.risk - x.risk);
 
-  const body = `
-    <div class="page-head">
-      <h2>Fleet<span class="thin">View</span></h2>
-      <p>${BB.FLEET.length} buoys across ${new Set(BB.FLEET.map(f => f.org)).size} operators. Sorted by bloom risk.</p>
-    </div>
-
-    ${worldMap(rows)}
-    <div class="risk-key">
-      <span><i style="background:#3FA34D"></i>Low</span>
-      <span><i style="background:#F0A32E"></i>Elevated</span>
-      <span><i style="background:#E8562A"></i>High</span>
-      <span><i style="background:#DE3B3B"></i>Critical</span>
-    </div>
-
-    <div class="sec-label sec-label--row"><span>All buoys</span><a data-action="refresh">Refresh</a></div>
-    <div class="rows">
-      ${rows.map(({ b, risk, band }) => `
-        <button class="row" data-buoy="${b.id}">
-          <span class="row__ic" style="background:${band.color}">${ic('ic-wave')}</span>
-          <span class="row__main">
-            <b>${esc(b.name)}${b.id === state.buoyId ? ' <span class="badge b-blue">Current</span>' : ''}</b>
-            <small>${esc(b.id)} · ${esc(b.water)}<br>${esc(b.org)} · ${b.battery}% batt · ${b.cartridges} cartridge${b.cartridges === 1 ? '' : 's'}</small>
-          </span>
-          <span class="row__end">
-            <span class="big" style="color:${band.color}">${risk}</span>
-            <span class="badge ${band.key === 'low' ? 'b-green' : band.key === 'mod' ? 'b-amber' : 'b-red'}">${band.label}</span>
-          </span>
-        </button>`).join('')}
-    </div>
-
-    <div class="card card--pad">
-      <div class="card__title"><h3>Fleet totals</h3><span>this season</span></div>
-      <div class="kv"><span>Buoys reporting</span><b>${BB.FLEET.length} / ${BB.FLEET.length}</b></div>
-      <div class="kv"><span>Cartridges deployed</span><b>${state.cartridges.filter(c => c.state !== 'loaded').length}</b></div>
-      <div class="kv"><span>Algae recovered</span><b>1,240 kg</b></div>
-      <div class="kv"><span>Basins above threshold</span><b>${rows.filter(r => r.risk >= state.thresholds.risk).length}</b></div>
-    </div>`;
-
-  return shell(barPlain('Fleet View'), body, 'fleet');
+  return shell(barPlain('Fleet View'), worldMap(rows), 'fleet', 'view--map');
 }
 
 /* ============================================================

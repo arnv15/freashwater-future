@@ -468,32 +468,47 @@ kbd{
 .b-grey{background:#EEF3F7;color:var(--muted);}
 
 /* ============================ WORLD MAP ============================ */
-.worldmap{
-  margin:0 16px 8px;border-radius:var(--r-md);overflow:hidden;
-  box-shadow:var(--shadow-card);background:#CFE4EF;line-height:0;
-}
-.worldmap svg{width:100%;height:auto;display:block;}
-.worldmap__hint{
-  margin:0 20px 12px;font-size:10px;color:var(--muted);font-weight:600;text-align:center;
-}
+/* Fleet View is the map and nothing else: the view stops scrolling and the
+   map stretches to whatever height is left between app bar and tab bar. */
+.view--map{padding:0;overflow:hidden;display:flex;}
+/* the shared slide-up entry would leave 9px of phantom scroll overflow here */
+.view--map>*{animation:fadeIn .3s both;}
+.worldmap{position:relative;flex:1 1 auto;min-height:0;background:#9FC4D8;line-height:0;}
+.worldmap svg{width:100%;height:100%;display:block;}
+
 .wm-land path{fill:#E7EEDA;stroke:#C4D6AC;stroke-width:.6;stroke-linejoin:round;}
 .wm-grat line{stroke:#B7D5E3;stroke-width:.4;}
 .wm-eq{stroke:#9CC3D6;stroke-width:.6;stroke-dasharray:3 2;}
 .wm-lead{stroke-width:.8;opacity:.6;}
 .wm-anchor{opacity:.9;}
 .wm-halo{opacity:.95;}
-.wm-pin{cursor:pointer;transition:transform .18s;transform-box:fill-box;transform-origin:center;}
+.wm-pin{cursor:pointer;}
 .wm-pin:hover .wm-halo{r:7;}
 .wm-pin:focus{outline:none;}
 .wm-pin:focus .wm-halo{stroke:var(--ocean-700);stroke-width:1.2;}
 @keyframes wmripple{0%{r:4.5;opacity:.5;}100%{r:12;opacity:0;}}
 .wm-ping{animation:wmripple 2.6s ease-out infinite;}
 
-.risk-key{
-  display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:0 20px 14px;
-  font-size:10px;font-weight:700;color:var(--ink-2);
+/* floating overlays on the map */
+.map-hint{
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);margin:0;
+  padding:6px 13px;border-radius:999px;white-space:nowrap;line-height:1.2;
+  background:rgba(255,255,255,.9);backdrop-filter:blur(8px);
+  box-shadow:0 3px 12px rgba(6,42,69,.16);
+  font-size:10.5px;font-weight:650;color:var(--ink-2);
 }
-.risk-key i{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:4px;}
+.map-legend{
+  position:absolute;left:12px;bottom:12px;display:grid;gap:4px;
+  padding:9px 12px;border-radius:12px;line-height:1.2;
+  background:rgba(255,255,255,.92);backdrop-filter:blur(8px);
+  box-shadow:0 4px 14px rgba(6,42,69,.18);
+  font-size:10px;font-weight:700;color:var(--ink-2);text-align:left;
+}
+.map-legend b{
+  font-size:8.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:1px;
+}
+.map-legend i{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;}
 
 /* ============================ BUOY SHEET ============================ */
 .sheet{position:absolute;inset:0;z-index:75;}
