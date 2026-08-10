@@ -41,44 +41,48 @@ BB.RISK_WEIGHTS = {
 /* ---------------------------------------------------------------
    2. FLEET
    --------------------------------------------------------------- */
+/* Cartridge bay size and dose volume, shared by every buoy. */
+BB.CART_BAY = 6;
+BB.CART_LITRES = 0.5;
+
 BB.FLEET = [
   {
-    id:'BG-014', name:'Maumee Bay', water:'Lake Erie — Western Basin',
+    id:'BG-014', tankCap:140, name:'Maumee Bay', water:'Lake Erie — Western Basin',
     lat:41.6870, lon:-83.2341, org:'Toledo Water Authority',
     x:30, y:34, deployed:'2026-04-11', battery:87, solar:23.4,
     tank:62, cartridges:4, seed:{ ph:8.35, do:6.4, voc:26.5, temp:24.6, chl:31, pc:14.5, turbidity:19, nitrate:2.4, phosphate:0.098 },
     trend:'rising', depth:3.2
   },
   {
-    id:'BG-021', name:'Grand Lake St. Marys', water:'Mercer County, OH',
+    id:'BG-021', tankCap:110, name:'Grand Lake St. Marys', water:'Mercer County, OH',
     lat:40.5395, lon:-84.4977, org:'Ohio EPA',
     x:58, y:52, deployed:'2026-03-28', battery:74, solar:19.1,
     tank:38, cartridges:2, seed:{ ph:8.05, do:7.6, voc:16.2, temp:23.1, chl:17, pc:6.2, turbidity:14, nitrate:1.8, phosphate:0.061 },
     trend:'rising', depth:2.4
   },
   {
-    id:'BG-007', name:'Chautauqua Lake', water:'Chautauqua County, NY',
+    id:'BG-007', tankCap:110, name:'Chautauqua Lake', water:'Chautauqua County, NY',
     lat:42.1620, lon:-79.4050, org:'CLP Alliance',
     x:74, y:26, deployed:'2026-05-02', battery:91, solar:26.8,
     tank:12, cartridges:6, seed:{ ph:7.62, do:9.1, voc:8.4, temp:21.2, chl:8.5, pc:2.1, turbidity:7, nitrate:0.9, phosphate:0.028 },
     trend:'steady', depth:4.1
   },
   {
-    id:'BG-033', name:'Clear Lake', water:'Lake County, CA',
+    id:'BG-033', tankCap:140, name:'Clear Lake', water:'Lake County, CA',
     lat:39.0219, lon:-122.7580, org:'Big Valley Band EPA',
     x:16, y:68, deployed:'2026-02-17', battery:63, solar:31.2,
     tank:81, cartridges:1, seed:{ ph:8.58, do:5.2, voc:38.1, temp:26.9, chl:47, pc:23.4, turbidity:27, nitrate:3.1, phosphate:0.142 },
     trend:'rising', depth:2.0
   },
   {
-    id:'BG-046', name:'Lake Chaohu', water:'Anhui Province, CN',
+    id:'BG-046', tankCap:160, name:'Lake Chaohu', water:'Anhui Province, CN',
     lat:31.5500, lon:117.5500, org:'Chaohu Basin Authority',
     x:88, y:70, deployed:'2026-01-09', battery:55, solar:14.7,
     tank:29, cartridges:3, seed:{ ph:7.88, do:8.2, voc:12.9, temp:22.4, chl:12.5, pc:4.4, turbidity:11, nitrate:1.4, phosphate:0.044 },
     trend:'falling', depth:3.6
   },
   {
-    id:'BG-052', name:'Milford Reservoir', water:'Geary County, KS',
+    id:'BG-052', tankCap:110, name:'Milford Reservoir', water:'Geary County, KS',
     lat:39.0747, lon:-96.9050, org:'Kansas DHE',
     x:44, y:80, deployed:'2026-06-20', battery:96, solar:28.3,
     tank:5, cartridges:6, seed:{ ph:7.41, do:9.8, voc:5.1, temp:19.8, chl:5.2, pc:1.2, turbidity:5, nitrate:0.6, phosphate:0.019 },

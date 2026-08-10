@@ -32,7 +32,9 @@ const state = {
   alerts:[],
   cartridges:BB.CARTRIDGES.map(c => Object.assign({}, c)),
   thresholds:{ risk:65, autoDeploy:true, pushEnabled:true, quiet:false, doFloor:5.0 },
-  tickCount:0
+  tickCount:0,
+  /* map window: centre in map units (deg) + zoom, 1 = full latitude */
+  map:{ cx:80, cy:90, zoom:1, focusIdx:null }
 };
 
 BB.FLEET.forEach(b => {
@@ -53,7 +55,7 @@ state.alerts = [
     mins:22, buoy:'BG-014', unread:true, acts:[['View sensors','sensors'],['Cartridge log','cartridges']] },
   { id:'a2', sev:'high', icon:'ic-drop',  color:'#E8562A', title:'Dissolved oxygen below floor',
     body:'BG-033 Clear Lake reading 5.2 mg/L, under the 6.0 mg/L floor for 4 consecutive samples. Overnight respiration from existing biomass is the likely driver.',
-    mins:96, buoy:'BG-033', unread:true, acts:[['Open buoy','fleet']] },
+    mins:96, buoy:'BG-033', unread:true, acts:[['Open map','home']] },
   { id:'a3', sev:'warn', icon:'ic-cartridge', color:'#F0A32E', title:'Cartridge stock low — BG-033',
     body:'1 cartridge remaining on board and risk trending up. Schedule a resupply run before the next forecast warm spell.',
     mins:210, buoy:'BG-033', unread:false, acts:[['Cartridge log','cartridges']] },
@@ -181,30 +183,29 @@ function gauge(score, band){
    SHARED CHROME
    ============================================================ */
 function tabbar(active){
-  const unread = state.alerts.filter(a => a.unread).length;
-  const tabs = [
-    ['home','ic-home'], ['analytics','ic-chart'], ['fleet','ic-pin'],
-    ['alerts','ic-bell'], ['profile','ic-user']
-  ];
+  const tabs = [['home','ic-pin'], ['analytics','ic-chart'], ['profile','ic-user']];
   return `<nav class="tabbar">${tabs.map(([k, i]) => `
     <button class="tab ${active === k ? 'is-on' : ''}" data-goto="${k}" aria-label="${k}">
-      ${ic(i)}${k === 'alerts' && unread ? `<span class="tab__badge">${unread}</span>` : ''}
+      ${ic(i)}
     </button>`).join('')}</nav>`;
+}
+
+/* Home app bar: the alerts bell takes the slot the drawer button used
+   to occupy, so notifications are one tap from the map. */
+function barMap(){
+  const unread = state.alerts.filter(a => a.unread).length;
+  return `<header class="appbar">
+    <svg class="appbar__logo" viewBox="0 0 120 120"><use href="#logo-mark"/></svg>
+    <span class="appbar__title">Fleet Map</span>
+    <button class="appbar__btn appbar__bell" data-goto="alerts" aria-label="Alerts">
+      ${ic('ic-bell')}
+      ${unread ? `<span class="appbar__badge" data-badge>${unread}</span>` : ''}
+    </button>
+  </header>`;
 }
 
 function shell(bar, body, active, viewClass){
   return bar + `<div class="view ${viewClass || ''}" id="view">${body}</div>` + tabbar(active);
-}
-
-function barBrand(){
-  const b = buoy();
-  return `<header class="appbar appbar--brand">
-    <svg class="appbar__logo" viewBox="0 0 120 120"><use href="#logo-mark"/></svg>
-    <button class="appbar__loc" data-action="cycle-buoy" title="Switch buoy">
-      ${ic('ic-pin')}<span>${BB.coord(b.lat, b.lon)}</span>${ic('ic-chev','chev')}
-    </button>
-    <button class="appbar__btn" data-action="open-drawer" aria-label="Menu">${ic('ic-menu')}</button>
-  </header>`;
 }
 
 function barPlain(title, backTo){
@@ -255,112 +256,6 @@ function ScreenLogin(){
       <button class="btn btn--ghost btn--block" data-action="login">Create an account</button>
     </div>
   </div>`;
-}
-
-/* ============================================================
-   SCREEN — HOME
-   ============================================================ */
-function ScreenHome(){
-  const b = buoy(), r = readings(), risk = riskOf(), band = BB.riskBand(risk);
-  const cart = state.cartridges.filter(c => c.buoy === b.id && c.state === 'loaded').length + b.cartridges;
-  const tankPct = b.tank;
-
-  const body = `
-    <div class="hero">
-      <div class="hero__sky"></div><div class="hero__sun"></div>
-      <svg class="hero__buoy" width="86" height="86" viewBox="0 0 86 86" aria-hidden="true">
-        <ellipse cx="43" cy="62" rx="30" ry="6" fill="rgba(6,42,69,.18)"/>
-        <rect x="22" y="16" width="42" height="10" rx="2.5" fill="#1B3A52"/>
-        <rect x="24" y="18" width="38" height="6" rx="1.5" fill="#2E5F86"/>
-        <rect x="41" y="26" width="4" height="16" fill="#8A98A4"/>
-        <circle cx="43" cy="14" r="3.4" fill="#7CE08A"/>
-        <path d="M24 44h38l-5 16H29z" fill="#E8562A"/>
-        <path d="M24 44h38l-1.6 5H25.6z" fill="#F0A32E"/>
-        <rect x="40" y="60" width="6" height="12" rx="2" fill="#B9C6D0"/>
-        <path d="M4 66c8-5 14 5 22 0s14 5 22 0 14 5 22 0 12 3 16 1" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="2.4" stroke-linecap="round"/>
-      </svg>
-      <div class="hero__glare"></div>
-      <div class="hero__meta">
-        <span class="hero__badge"><span class="livedot"></span>Streaming · ${b.id}</span>
-        <span class="hero__badge">${esc(b.name)}</span>
-      </div>
-    </div>
-
-    <div class="devrow">
-      <span class="devrow__ic">${ic('ic-wave')}</span>
-      <span>Freshwater Future 1.0</span>
-      <span class="devrow__status"><span class="livedot"></span>Online</span>
-    </div>
-
-    <!-- bloom risk card -->
-    <button class="feed" data-goto="sensors">
-      <div class="feed__thumb" style="display:grid;place-items:center;background:linear-gradient(150deg,#0B3C5D,#2E8FC0)">
-        <div style="text-align:center;color:#fff">
-          <div style="font-size:30px;font-weight:800;letter-spacing:-1.4px;line-height:1" data-live="risk-num">${risk}</div>
-          <div style="font-size:8px;font-weight:750;letter-spacing:.13em;opacity:.8;margin-top:3px">BLOOM RISK</div>
-        </div>
-      </div>
-      <div class="feed__body">
-        <h4>Risk is ${band.label.toLowerCase()}</h4>
-        <p>The model is reading pH ${BB.fmt('ph', r.ph)}, DO ${BB.fmt('do', r.do)} mg/L and an AVOC index of ${BB.fmt('voc', r.voc)} ppb across the last 12 hours.</p>
-        <span class="feed__cta">Open live dashboard ${ic('ic-chev')}</span>
-      </div>
-    </button>
-
-    <!-- cartridge card -->
-    <button class="feed" data-goto="cartridges">
-      <div class="feed__thumb" style="background:linear-gradient(150deg,#E6F6EA,#CDEAF3);display:grid;place-items:center">
-        <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true">
-          <rect x="15" y="4" width="16" height="6" rx="2" fill="#2C7A3F"/>
-          <rect x="12" y="10" width="22" height="30" rx="5" fill="#fff" stroke="#3FA34D" stroke-width="2"/>
-          <rect x="16" y="24" width="14" height="12" rx="3" fill="#3FA34D" opacity=".85"/>
-          <rect x="16" y="15" width="14" height="6" rx="2" fill="#CDEAF3"/>
-        </svg>
-      </div>
-      <div class="feed__body">
-        <h4>Half Done!</h4>
-        <p>Your buoy has successfully dispensed half of the algicide in its tank.</p>
-        <div style="margin-top:6px"><div class="prog prog--leaf"><div class="prog__fill" style="width:52%"></div></div></div>
-        <span class="feed__chip">${cart} cartridges on board</span>
-        <span class="feed__cta">Check the Data! ${ic('ic-chev')}</span>
-      </div>
-    </button>
-
-    <!-- fleet card -->
-    <button class="feed" data-goto="fleet">
-      <div class="feed__thumb" style="background:#E4F1FA">
-        <svg viewBox="0 0 104 90" style="width:100%;height:100%" aria-hidden="true">
-          <path d="M0 60c14-14 26 6 40-6s28 10 40-4 24 2 24 2" fill="none" stroke="#B8DCEA" stroke-width="2"/>
-          <path d="M0 34c12-10 24 8 36-2s26 8 36-4 22 4 32 2" fill="none" stroke="#CDEAF3" stroke-width="2"/>
-          <circle cx="24" cy="30" r="7" fill="#1B6CA8" opacity=".18"/>
-          <circle cx="24" cy="30" r="3.4" fill="#1B6CA8"/>
-          <circle cx="66" cy="56" r="7" fill="#E8562A" opacity=".18"/>
-          <circle cx="66" cy="56" r="3.4" fill="#E8562A"/>
-          <circle cx="86" cy="24" r="3.4" fill="#3FA34D"/>
-          <path d="M24 30 66 56 86 24" fill="none" stroke="#7FD8E8" stroke-width="1.4" stroke-dasharray="3 3"/>
-        </svg>
-      </div>
-      <div class="feed__body">
-        <h4>Make Friends!</h4>
-        <p>Check out other Freshwater Future buoys in your fleet. Compare basins and share intervention outcomes.</p>
-        <span class="feed__chip">${BB.FLEET.length} buoys · ${new Set(BB.FLEET.map(f => f.org)).size} operators</span>
-        <span class="feed__cta">Search ${ic('ic-search')}</span>
-      </div>
-    </button>
-
-    <!-- tank -->
-    <div class="card card--pad">
-      <div class="card__title"><h3>Holding tank</h3><span>${tankPct}% full</span></div>
-      <div class="prog ${tankPct > 75 ? 'prog--amber' : ''}"><div class="prog__fill" style="width:${tankPct}%"></div></div>
-      <div class="kv" style="margin-top:9px"><span>Skimmed this week</span><b>40.5 kg</b></div>
-      <div class="kv"><span>Next digester run</span><b>in 2 days</b></div>
-    </div>
-
-    <div class="dotsrow"><i class="on"></i><i></i><i></i><i></i></div>
-    <div class="seemore"><span></span><span>See More ${'›'}</span></div>
-    <div class="feed-end">No more Information</div>`;
-
-  return shell(barBrand(), body, 'home');
 }
 
 /* ============================================================
@@ -465,11 +360,33 @@ function driversHTML(drivers){
 }
 
 /* ============================================================
-   SCREEN — ANALYTICS
+   SCREEN — STATISTICS
+   Fleet-wide first (how full are the holding tanks, how many buoys
+   are carrying a full algicide load), then per-buoy detail at the
+   bottom for anyone who wants to drill in.
    ============================================================ */
+function fleetTotals(){
+  const held = BB.FLEET.reduce((a, b) => a + b.tank / 100 * b.tankCap, 0);
+  const cap  = BB.FLEET.reduce((a, b) => a + b.tankCap, 0);
+  const carts = BB.FLEET.reduce((a, b) => a + b.cartridges, 0);
+  const cartCap = BB.FLEET.length * BB.CART_BAY;
+  return {
+    held, cap, pct: Math.round(held / cap * 100),
+    carts, cartCap, cartPct: Math.round(carts / cartCap * 100),
+    full: BB.FLEET.filter(b => b.cartridges >= BB.CART_BAY).length,
+    low:  BB.FLEET.filter(b => b.cartridges <= 1).length,
+    needService: BB.FLEET.filter(b => b.tank >= 75).length
+  };
+}
+
 function ScreenAnalytics(){
   const s = BB.SUMMARY[state.range];
-  const pct = Math.round(s.collected / s.target * 100);
+  const t = fleetTotals();
+
+  /* algicide load, emptiest first — that is the list you act on */
+  const byLoad = BB.FLEET.slice().sort((a, b) => a.cartridges - b.cartridges);
+  /* holding tank, fullest first — those need collecting */
+  const byTank = BB.FLEET.slice().sort((a, b) => b.tank - a.tank);
 
   const body = `
     <div class="segs">
@@ -479,82 +396,152 @@ function ScreenAnalytics(){
         </button>`).join('')}
     </div>
 
-    <div class="page-head">
-      <h2>${s.title[0]}<span class="thin">${s.title[1]}</span></h2>
-    </div>
-
-    <div class="chartbox">${barChart(s.bars, s.max)}</div>
-
-    <div class="bigstat">
-      <div class="bigstat__label">${s.cLabel}</div>
+    <!-- fleet holding tanks -->
+    <div class="card card--pad">
+      <div class="card__title"><h3>Algae held across the fleet</h3><span>${BB.FLEET.length} buoys</span></div>
       <div class="bigstat__row">
-        <span class="bigstat__num">${s.collected}</span>
-        <span class="bigstat__unit">${s.cUnit} out of ${s.target}</span>
+        <span class="bigstat__num">${Math.round(t.held)}</span>
+        <span class="bigstat__unit">KG OF ${t.cap} CAPACITY</span>
       </div>
-      <div class="prog prog--leaf" style="margin-top:9px"><div class="prog__fill" style="width:${pct}%"></div></div>
+      <div class="prog ${t.pct > 75 ? 'prog--amber' : 'prog--leaf'}" style="margin-top:10px">
+        <div class="prog__fill" style="width:${t.pct}%"></div>
+      </div>
+      <div class="kv" style="margin-top:10px"><span>Fleet tanks</span><b>${t.pct}% full</b></div>
+      <div class="kv"><span>Skimmed this ${state.range.replace('ly','')}</span><b>${s.collected} kg</b></div>
+      <div class="kv"><span>Buoys due for collection</span>
+        <b style="color:${t.needService ? 'var(--coral)' : 'var(--leaf-dark)'}">${t.needService}</b></div>
     </div>
 
-    <div class="legend">
-      ${s.series.map(x => {
-        const lo = Math.min.apply(null, x.pts), hi = Math.max.apply(null, x.pts);
-        return `<span><i style="background:${x.color}"></i>${esc(x.name)}
-                  <em style="font-style:normal;color:var(--muted)">${lo}–${hi} ${esc(x.unit)}</em></span>`;
+    <!-- algicide readiness -->
+    <div class="card card--pad">
+      <div class="card__title"><h3>Algicide readiness</h3><span>${t.carts}/${t.cartCap} cartridges</span></div>
+      <div class="bigstat__row">
+        <span class="bigstat__num" style="color:${t.full === BB.FLEET.length ? 'var(--leaf-dark)' : 'var(--ocean-800)'}">${t.full}</span>
+        <span class="bigstat__unit">OF ${BB.FLEET.length} BUOYS FULLY LOADED</span>
+      </div>
+      <div class="prog ${t.cartPct < 50 ? 'prog--danger' : t.cartPct < 80 ? 'prog--amber' : 'prog--leaf'}" style="margin-top:10px">
+        <div class="prog__fill" style="width:${t.cartPct}%"></div>
+      </div>
+      ${t.low ? `<div class="note" style="margin:11px 0 0">
+        <b>${t.low} buoy${t.low > 1 ? 's' : ''} at or below one cartridge.</b>
+        Schedule a resupply before the next warm spell — a buoy with an empty bay can still
+        predict a bloom but cannot act on it.</div>` : ''}
+    </div>
+
+    <!-- per-buoy algicide tanks -->
+    <div class="sec-label">Algicide on board</div>
+    <div class="rows">
+      ${byLoad.map(b => {
+        const pct = Math.round(b.cartridges / BB.CART_BAY * 100);
+        const tone = b.cartridges >= BB.CART_BAY ? 'b-green' : b.cartridges <= 1 ? 'b-red' : 'b-amber';
+        return `<div class="statrow">
+          <div class="statrow__top">
+            <b>${esc(b.name)}</b>
+            <span class="badge ${tone}">${b.cartridges}/${BB.CART_BAY}</span>
+          </div>
+          <div class="capbar capbar--light">
+            ${Array.from({ length: BB.CART_BAY }, (_, i) => `<i class="${i < b.cartridges ? 'on' : ''}"></i>`).join('')}
+          </div>
+          <div class="statrow__foot">
+            <span>${esc(b.id)}</span>
+            <span>${(b.cartridges * BB.CART_LITRES).toFixed(1)} L of strain 6A1 · ${pct}%</span>
+          </div>
+        </div>`;
       }).join('')}
     </div>
-    <div class="legend" style="padding-top:0;font-size:10px;color:var(--muted);font-weight:600">
-      Each line is scaled to its own range so both channels stay readable.
-    </div>
-    <div class="chartbox">${lineChart(s.series, s.xl)}</div>
 
-    <div class="card card--pad">
-      <div class="card__title"><h3>Period stats</h3><span>${esc(buoy().name)}</span></div>
-      ${s.kpis.map(([k, v]) => `<div class="kv"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}
+    <!-- per-buoy holding tanks -->
+    <div class="sec-label">Holding tanks</div>
+    <div class="rows">
+      ${byTank.map(b => `
+        <div class="statrow">
+          <div class="statrow__top">
+            <b>${esc(b.name)}</b>
+            <span class="badge ${b.tank >= 75 ? 'b-red' : b.tank >= 40 ? 'b-amber' : 'b-green'}">${b.tank}%</span>
+          </div>
+          <div class="prog ${b.tank >= 75 ? 'prog--amber' : 'prog--leaf'}">
+            <div class="prog__fill" style="width:${b.tank}%"></div>
+          </div>
+          <div class="statrow__foot">
+            <span>${esc(b.id)}</span>
+            <span>${Math.round(b.tank / 100 * b.tankCap)} of ${b.tankCap} kg</span>
+          </div>
+        </div>`).join('')}
     </div>
 
+    <!-- period activity -->
+    <div class="sec-label">${state.range[0].toUpperCase() + state.range.slice(1)} activity</div>
+    <div class="chartbox">${barChart(s.bars, s.max)}</div>
     <div class="card card--pad">
       <div class="card__title"><h3>Resource recovery</h3><span>shore digester</span></div>
       <div class="kv"><span>Biogas produced</span><b>${s.bars[2].v} m³</b></div>
       <div class="kv"><span>Methane fraction</span><b>≈ 65%</b></div>
-      <div class="kv"><span>Energy returned to buoy</span><b>${(s.bars[2].v * 6.1).toFixed(0)} kWh<sub>e</sub></b></div>
-      <div class="note" style="margin:11px 0 0">
-        Skimmed biomass goes to anaerobic digestion on shore. The recovered methane offsets
-        the station load, so the intervention pays part of its own running cost.
-      </div>
+      <div class="kv"><span>Energy returned</span><b>${(s.bars[2].v * 6.1).toFixed(0)} kWh<sub>e</sub></b></div>
+      ${s.kpis.map(([k, v]) => `<div class="kv"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}
+    </div>
+
+    <!-- drill-down -->
+    <div class="sec-label">Detailed insights</div>
+    <p class="sec-note">Open any buoy for its live sensor channels, bloom-risk breakdown and telemetry.</p>
+    <div class="rows">
+      ${BB.FLEET.map(b => {
+        const risk = riskOf(b.id), band = BB.riskBand(risk);
+        return `<button class="row" data-buoy="${b.id}">
+          <span class="row__ic" style="background:${band.color}">${ic('ic-wave')}</span>
+          <span class="row__main">
+            <b>${esc(b.name)}</b>
+            <small>${esc(b.id)} · ${esc(b.org)}<br>${b.cartridges}/${BB.CART_BAY} cartridges · tank ${b.tank}% · batt ${b.battery}%</small>
+          </span>
+          <span class="row__end">
+            <span class="big" style="color:${band.color}">${risk}</span>
+            <span class="badge ${band.key === 'low' ? 'b-green' : band.key === 'mod' ? 'b-amber' : 'b-red'}">${band.label}</span>
+          </span>
+        </button>`;
+      }).join('')}
     </div>`;
 
-  return shell(barPlain('Analytics'), body, 'analytics');
+  return shell(barPlain('Statistics'), body, 'analytics');
 }
 
 /* ============================================================
-   SCREEN — FLEET  (world map)
+   MAP  (home screen)
    ------------------------------------------------------------
-   Equirectangular world map. Coastlines and buoy markers share one
-   projection (BB.projX / BB.projY) so every pin sits at its true
-   lat/lon. Working in degree units keeps that verifiable: a marker
-   at x=96.8 IS longitude -83.2.
+   Equirectangular. Coastlines and buoy markers share one projection
+   (BB.projX / BB.projY) so every pin sits at its true lat/lon, and
+   working in degree units keeps that verifiable: x=96.8 IS lon -83.2.
 
-   Ohio, New York and Kansas fall within a few degrees of each other,
-   so at phone width their markers would sit on top of one another.
-   A relaxation pass nudges overlapping markers apart and draws a
-   leader line back to the true position — the anchor dot stays
-   accurate, only the label-bearing marker moves.
+   The view is a windowed viewBox rather than a fitted one. At zoom 1
+   the window is exactly 180deg of latitude tall, so it always fills
+   the screen vertically with no empty band -- only a slice of
+   longitude is visible, and you pan to reach the rest.
    ============================================================ */
-/* Framed to lon -150..150: the widest-apart buoys are Clear Lake (-122.8)
-   and Lake Chaohu (117.6), so this crops empty Pacific without losing any
-   marker, and buys ~16% more scale on a portrait screen.
-   An undistorted world map can never fill a tall phone screen — markers
-   240° apart force a wide aspect — so the surrounding ocean is styled
-   rather than fought. */
-const MAP_VB = { x:30, y:6, w:300, h:168 };  /* lon -150..150, lat 84..-84 */
-const PIN_MIN_SEP = 11;                       /* degrees between markers */
+const WORLD = { w:360, h:180 };
+const PIN_SEP_PX = 26;      /* keep markers this far apart on screen */
+const MAX_ZOOM = 12;
 
-function layoutPins(rows){
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+/* Current window in map units, derived from centre + zoom + container. */
+function mapWindow(rect){
+  const A = rect.width / rect.height;
+  let h = WORLD.h / state.map.zoom;
+  let w = h * A;
+  if (w > WORLD.w){ w = WORLD.w; h = w / A; }
+  const cx = w >= WORLD.w ? WORLD.w / 2 : clamp(state.map.cx, w / 2, WORLD.w - w / 2);
+  const cy = h >= WORLD.h ? WORLD.h / 2 : clamp(state.map.cy, h / 2, WORLD.h - h / 2);
+  state.map.cx = cx; state.map.cy = cy;
+  return { x:cx - w / 2, y:cy - h / 2, w, h, scale:h / rect.height };
+}
+
+/* Spread markers that would overlap on screen, keeping a leader line
+   back to the true position. Recomputed per zoom because the required
+   separation in degrees shrinks as you zoom in. */
+function layoutPins(rows, minSep){
   const pins = rows.map(({ b, risk, band }) => ({
     id:b.id, name:b.name, risk, band,
     x:BB.projX(b.lon), y:BB.projY(b.lat),
     mx:BB.projX(b.lon), my:BB.projY(b.lat)
   }));
-
   for (let iter = 0; iter < 200; iter++){
     let moved = false;
     for (let i = 0; i < pins.length; i++){
@@ -562,9 +549,9 @@ function layoutPins(rows){
         const a = pins[i], c = pins[j];
         let dx = c.mx - a.mx, dy = c.my - a.my;
         let d = Math.sqrt(dx * dx + dy * dy);
-        if (d < 0.001){ dx = 0.6; dy = 0.4; d = 0.72; }   /* exact overlap: break the tie */
-        if (d < PIN_MIN_SEP){
-          const push = (PIN_MIN_SEP - d) / 2 * 0.8;
+        if (d < 0.001){ dx = 0.6; dy = 0.4; d = 0.72; }
+        if (d < minSep){
+          const push = (minSep - d) / 2 * 0.8;
           dx /= d; dy /= d;
           a.mx -= dx * push; a.my -= dy * push;
           c.mx += dx * push; c.my += dy * push;
@@ -574,13 +561,33 @@ function layoutPins(rows){
     }
     if (!moved) break;
   }
-
-  /* keep markers inside the visible frame */
-  pins.forEach(p => {
-    p.mx = Math.max(MAP_VB.x + 7, Math.min(MAP_VB.x + MAP_VB.w - 7, p.mx));
-    p.my = Math.max(MAP_VB.y + 7, Math.min(MAP_VB.y + MAP_VB.h - 7, p.my));
-  });
   return pins;
+}
+
+/* Markers are drawn at origin and scaled by `s` so they stay the same
+   size on screen at every zoom level. */
+function pinsMarkup(rows, s){
+  return layoutPins(rows, PIN_SEP_PX * s).map(p => {
+    const off = Math.sqrt((p.mx - p.x) ** 2 + (p.my - p.y) ** 2) > s * 2;
+    const hot = p.band.key === 'crit' || p.band.key === 'high';
+    return `<g class="wm-pin" data-pin="${p.id}" role="button" tabindex="0"
+               aria-label="${esc(p.name)}, bloom risk ${p.risk}">
+      <title>${esc(p.name)} — risk ${p.risk}</title>
+      ${off ? `<line class="wm-lead" x1="${p.x.toFixed(2)}" y1="${p.y.toFixed(2)}"
+                     x2="${p.mx.toFixed(2)}" y2="${p.my.toFixed(2)}"
+                     stroke="${p.band.color}" vector-effect="non-scaling-stroke"/>
+               <g transform="translate(${p.x.toFixed(2)},${p.y.toFixed(2)}) scale(${s})">
+                 <circle r="1.6" fill="${p.band.color}" opacity=".9"/>
+               </g>` : ''}
+      <g transform="translate(${p.mx.toFixed(2)},${p.my.toFixed(2)}) scale(${s})">
+        ${hot ? `<circle class="wm-ping" r="5" fill="${p.band.color}"/>` : ''}
+        <circle class="wm-halo" r="7" fill="#fff"/>
+        <circle r="5" fill="${p.band.color}"/>
+        <circle r="1.9" fill="#fff"/>
+        <circle r="13" fill="transparent"/>
+      </g>
+    </g>`;
+  }).join('');
 }
 
 function worldMap(rows){
@@ -588,55 +595,29 @@ function worldMap(rows){
     `<path d="${ring.map((p, i) => (i ? 'L' : 'M') + BB.projX(p[0]).toFixed(1) + ' ' + BB.projY(p[1]).toFixed(1)).join(' ')}Z"/>`
   ).join('');
 
-  /* The SVG scales to fit width, so on a portrait screen the viewBox band
-     sits in the middle of a much taller viewport. Ocean and graticule are
-     drawn well past the viewBox so they still reach the top and bottom
-     edges; only the land and pins stay inside real map bounds. */
   let grat = '';
   for (let lon = -150; lon <= 150; lon += 30){
-    grat += `<line x1="${BB.projX(lon)}" y1="-400" x2="${BB.projX(lon)}" y2="580"/>`;
+    grat += `<line x1="${BB.projX(lon)}" y1="0" x2="${BB.projX(lon)}" y2="180" vector-effect="non-scaling-stroke"/>`;
   }
   for (let lat = -60; lat <= 60; lat += 30){
-    grat += `<line x1="-400" y1="${BB.projY(lat)}" x2="760" y2="${BB.projY(lat)}"/>`;
+    grat += `<line x1="0" y1="${BB.projY(lat)}" x2="360" y2="${BB.projY(lat)}" vector-effect="non-scaling-stroke"/>`;
   }
 
-  const pins = layoutPins(rows).map(p => {
-    const off = Math.sqrt((p.mx - p.x) ** 2 + (p.my - p.y) ** 2) > 1.5;
-    const hot = p.band.key === 'crit' || p.band.key === 'high';
-    return `<g class="wm-pin" data-pin="${p.id}" role="button" tabindex="0"
-               aria-label="${esc(p.name)}, bloom risk ${p.risk}">
-      <title>${esc(p.name)} — risk ${p.risk}</title>
-      ${off ? `<line class="wm-lead" x1="${p.x.toFixed(1)}" y1="${p.y.toFixed(1)}"
-                     x2="${p.mx.toFixed(1)}" y2="${p.my.toFixed(1)}" stroke="${p.band.color}"/>
-               <circle class="wm-anchor" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="1.3" fill="${p.band.color}"/>` : ''}
-      ${hot ? `<circle class="wm-ping" cx="${p.mx.toFixed(1)}" cy="${p.my.toFixed(1)}" r="4.5" fill="${p.band.color}"/>` : ''}
-      <circle class="wm-halo" cx="${p.mx.toFixed(1)}" cy="${p.my.toFixed(1)}" r="6" fill="#fff"/>
-      <circle cx="${p.mx.toFixed(1)}" cy="${p.my.toFixed(1)}" r="4.3" fill="${p.band.color}"/>
-      <circle cx="${p.mx.toFixed(1)}" cy="${p.my.toFixed(1)}" r="1.6" fill="#fff"/>
-      <circle cx="${p.mx.toFixed(1)}" cy="${p.my.toFixed(1)}" r="10" fill="transparent"/>
-    </g>`;
-  }).join('');
-
-  return `<div class="worldmap">
-    <svg viewBox="${MAP_VB.x} ${MAP_VB.y} ${MAP_VB.w} ${MAP_VB.h}" role="img"
-         preserveAspectRatio="xMidYMid meet"
-         aria-label="World map of ${rows.length} monitoring buoys">
-      <defs>
-        <linearGradient id="wmOcean" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0"   stop-color="#9FC4D8"/>
-          <stop offset=".36" stop-color="#CFE4EF"/>
-          <stop offset=".64" stop-color="#CFE4EF"/>
-          <stop offset="1"   stop-color="#9FC4D8"/>
-        </linearGradient>
-      </defs>
-      <rect x="-400" y="-400" width="1160" height="980" fill="url(#wmOcean)"/>
+  return `<div class="worldmap" id="worldmap">
+    <svg id="wmSvg" viewBox="0 0 360 180" preserveAspectRatio="none"
+         role="img" aria-label="World map of ${rows.length} monitoring buoys">
+      <rect x="0" y="0" width="360" height="180" fill="#CFE4EF"/>
       <g class="wm-grat">${grat}</g>
-      <line class="wm-eq" x1="-400" y1="90" x2="760" y2="90"/>
+      <line class="wm-eq" x1="0" y1="90" x2="360" y2="90" vector-effect="non-scaling-stroke"/>
       <g class="wm-land">${land}</g>
-      ${pins}
+      <g id="wmPins"></g>
     </svg>
 
-    <p class="map-hint">Tap a marker for buoy details</p>
+    <div class="map-zoom">
+      <button data-action="zoom-in"  aria-label="Zoom in">+</button>
+      <button data-action="zoom-out" aria-label="Zoom out">&minus;</button>
+      <button data-action="zoom-next" aria-label="Jump to next buoy" title="Jump to next buoy">${ic('ic-pin')}</button>
+    </div>
 
     <div class="map-legend">
       <b>Bloom risk</b>
@@ -648,16 +629,157 @@ function worldMap(rows){
   </div>`;
 }
 
+/* ---- view application + interaction ---- */
+let mapRows = [];
+let lastPinScale = -1;
+
+function applyMapView(force){
+  const wrap = $('#worldmap'), svg = $('#wmSvg');
+  if (!wrap || !svg) return;
+  const rect = wrap.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const win = mapWindow(rect);
+  svg.setAttribute('viewBox',
+    `${win.x.toFixed(3)} ${win.y.toFixed(3)} ${win.w.toFixed(3)} ${win.h.toFixed(3)}`);
+  /* re-lay markers only when the scale actually changed — panning is free */
+  if (force || Math.abs(win.scale - lastPinScale) > 1e-4){
+    lastPinScale = win.scale;
+    $('#wmPins').innerHTML = pinsMarkup(mapRows, win.scale);
+  }
+}
+
+function zoomBy(factor, clientX, clientY){
+  const wrap = $('#worldmap');
+  if (!wrap) return;
+  const rect = wrap.getBoundingClientRect();
+  const before = mapWindow(rect);
+  const px = clientX == null ? rect.width / 2 : clientX - rect.left;
+  const py = clientY == null ? rect.height / 2 : clientY - rect.top;
+  /* map coordinate under the cursor, held fixed across the zoom */
+  const ax = before.x + (px / rect.width) * before.w;
+  const ay = before.y + (py / rect.height) * before.h;
+
+  state.map.zoom = clamp(state.map.zoom * factor, 1, MAX_ZOOM);
+  const after = mapWindow(rect);
+  state.map.cx = ax - (px / rect.width - 0.5) * after.w;
+  state.map.cy = ay - (py / rect.height - 0.5) * after.h;
+  applyMapView();
+}
+
+/* The fleet spans 240deg of longitude but the zoom-1 window is only as
+   wide as the screen aspect allows (~100deg), so "fit everything" is not
+   reachable without reintroducing empty bands. This cycles through the
+   buoys worst-first instead, which is what you actually want to do. */
+function jumpToBuoy(){
+  if (!mapRows.length) return;
+  const m = state.map;
+  m.focusIdx = (m.focusIdx == null ? -1 : m.focusIdx) + 1;
+  if (m.focusIdx >= mapRows.length) m.focusIdx = 0;
+  const r = mapRows[m.focusIdx];
+  m.zoom = Math.max(m.zoom, 2.6);
+  m.cx = BB.projX(r.b.lon);
+  m.cy = BB.projY(r.b.lat);
+  applyMapView();
+  flashMapLabel(`${r.b.name} · risk ${r.risk}`);
+}
+
+function flashMapLabel(text){
+  const wrap = $('#worldmap');
+  if (!wrap) return;
+  let el = $('.map-flash', wrap);
+  if (!el){
+    el = document.createElement('div');
+    el.className = 'map-flash';
+    wrap.appendChild(el);
+  }
+  el.textContent = text;
+  el.classList.remove('is-out');
+  clearTimeout(flashMapLabel._t);
+  flashMapLabel._t = setTimeout(() => el.classList.add('is-out'), 1800);
+}
+
+function initMap(rows){
+  mapRows = rows;
+  lastPinScale = -1;
+  const wrap = $('#worldmap'), svg = $('#wmSvg');
+  if (!wrap || !svg) return;
+  applyMapView(true);
+
+  const pointers = new Map();
+  let panning = false, moved = 0, lastX = 0, lastY = 0, pinchDist = 0;
+
+  svg.addEventListener('pointerdown', e => {
+    pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    svg.setPointerCapture(e.pointerId);
+    if (pointers.size === 1){ panning = true; moved = 0; lastX = e.clientX; lastY = e.clientY; }
+    if (pointers.size === 2){
+      panning = false;
+      const [a, b] = Array.from(pointers.values());
+      pinchDist = Math.hypot(b.x - a.x, b.y - a.y);
+    }
+  });
+
+  svg.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+
+    if (pointers.size === 2){
+      const [a, b] = Array.from(pointers.values());
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      if (pinchDist > 0 && d > 0){
+        zoomBy(d / pinchDist, (a.x + b.x) / 2, (a.y + b.y) / 2);
+        moved += Math.abs(d - pinchDist);
+      }
+      pinchDist = d;
+      return;
+    }
+
+    if (!panning) return;
+    const rect = wrap.getBoundingClientRect();
+    const win = mapWindow(rect);
+    const dx = e.clientX - lastX, dy = e.clientY - lastY;
+    moved += Math.abs(dx) + Math.abs(dy);
+    state.map.cx -= dx * win.w / rect.width;
+    state.map.cy -= dy * win.h / rect.height;
+    lastX = e.clientX; lastY = e.clientY;
+    applyMapView();
+  });
+
+  const release = e => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchDist = 0;
+    if (pointers.size === 0){
+      panning = false;
+      /* a drag must not also register as a tap on a marker */
+      if (moved > 6){ svg.dataset.dragged = '1'; setTimeout(() => { delete svg.dataset.dragged; }, 0); }
+    }
+  };
+  svg.addEventListener('pointerup', release);
+  svg.addEventListener('pointercancel', release);
+
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    zoomBy(Math.pow(0.9985, e.deltaY), e.clientX, e.clientY);
+  }, { passive:false });
+
+  svg.addEventListener('dblclick', e => { e.preventDefault(); zoomBy(1.8, e.clientX, e.clientY); });
+
+  if (!initMap._resize){
+    initMap._resize = true;
+    window.addEventListener('resize', () => applyMapView(true));
+  }
+}
+
 /* ============================================================
    SCREEN — FLEET
    ============================================================ */
-function ScreenFleet(){
+function ScreenHome(){
   const rows = BB.FLEET.map(b => {
     const risk = riskOf(b.id);
     return { b, risk, band: BB.riskBand(risk) };
   }).sort((x, y) => y.risk - x.risk);
 
-  return shell(barPlain('Fleet View'), worldMap(rows), 'fleet', 'view--map');
+  return shell(barMap(), worldMap(rows), 'home', 'view--map');
 }
 
 /* ============================================================
@@ -665,12 +787,7 @@ function ScreenFleet(){
    ============================================================ */
 function ScreenAlerts(){
   const body = `
-    <div class="page-head">
-      <h2>Alerts<span class="thin">&amp; Thresholds</span></h2>
-      <p>${state.alerts.filter(a => a.unread).length} unread · pushed the moment the model crosses your line, not when the bloom shows up.</p>
-    </div>
-
-    <div class="rows">
+<div class="rows">
       ${state.alerts.map(a => `
         <div class="alert alert--${a.sev} ${a.unread ? 'is-unread' : ''}" data-alert="${a.id}">
           <span class="alert__ic" style="background:${a.color}">${ic(a.icon)}</span>
@@ -907,10 +1024,10 @@ function ScreenProfile(){
    ============================================================ */
 const SCREENS = {
   home:ScreenHome, sensors:ScreenSensors, analytics:ScreenAnalytics,
-  fleet:ScreenFleet, alerts:ScreenAlerts, cartridges:ScreenCartridges,
+  alerts:ScreenAlerts, cartridges:ScreenCartridges,
   harvest:ScreenHarvest, profile:ScreenProfile
 };
-const TAB_ORDER = ['home','analytics','fleet','alerts','profile'];
+const TAB_ORDER = ['home','analytics','profile'];
 
 function render(){
   if (!state.auth){
@@ -920,9 +1037,15 @@ function render(){
     return;
   }
   screenEl.classList.remove('sb-light');
-  screenEl.classList.toggle('sb-brand', state.screen === 'home');
+  screenEl.classList.remove('sb-brand');
   app.innerHTML = (SCREENS[state.screen] || ScreenHome)();
   const v = $('#view'); if (v) v.scrollTop = 0;
+  if (state.screen === 'home'){
+    initMap(BB.FLEET.map(b => {
+      const risk = riskOf(b.id);
+      return { b, risk, band: BB.riskBand(risk) };
+    }).sort((x, y) => y.risk - x.risk));
+  }
 }
 
 function go(scr){
@@ -1064,20 +1187,22 @@ function raiseBloomAlert(b, risk){
   if (auto) doDeploy(b, true);
 }
 
+function refreshBadge(){
+  const n = state.alerts.filter(x => x.unread).length;
+  const bell = $('.appbar__bell');
+  if (!bell) return;
+  let badge = $('[data-badge]', bell);
+  if (n && !badge) bell.insertAdjacentHTML('beforeend', `<span class="appbar__badge" data-badge>${n}</span>`);
+  else if (n && badge) badge.textContent = n;
+  else if (badge) badge.remove();
+}
+
 function addAlert(a){
   a.id = 'a' + Date.now() + Math.random().toString(36).slice(2, 5);
   a.mins = 0; a.unread = true;
   state.alerts.unshift(a);
   if (state.alerts.length > 24) state.alerts.pop();
-  const badgeHost = $('.tabbar');
-  if (badgeHost && state.screen !== 'alerts'){
-    const n = state.alerts.filter(x => x.unread).length;
-    let badge = $('.tab__badge', badgeHost);
-    if (!badge){
-      const tabEl = $$('.tab', badgeHost)[3];
-      if (tabEl) tabEl.insertAdjacentHTML('beforeend', `<span class="tab__badge">${n}</span>`);
-    } else badge.textContent = n;
-  }
+  refreshBadge();
   if (state.screen === 'alerts') render();
 }
 
@@ -1149,7 +1274,7 @@ function doDeploy(b, automatic){
       sev:'warn', icon:'ic-cartridge', color:'#F0A32E',
       title:`Cartridge bay empty — ${b.name}`,
       body:`${b.id} released its last cartridge (${id}). Until a resupply run, this basin can sense and predict but cannot intervene.`,
-      buoy:b.id, acts:[['Cartridge log','cartridges'],['Fleet view','fleet']]
+      buoy:b.id, acts:[['Cartridge log','cartridges'],['Map','home']]
     });
   }
 
@@ -1332,7 +1457,12 @@ document.addEventListener('click', e => {
 
   /* map marker -> detail sheet (does not navigate) */
   const pinEl = t.closest('[data-pin]');
-  if (pinEl){ openSheet(pinEl.getAttribute('data-pin')); return; }
+  if (pinEl){
+    const svg = $('#wmSvg');
+    if (svg && svg.dataset.dragged) return;   /* was a pan, not a tap */
+    openSheet(pinEl.getAttribute('data-pin'));
+    return;
+  }
 
   const buoyEl = t.closest('[data-buoy]');
   if (buoyEl){
@@ -1374,6 +1504,9 @@ document.addEventListener('click', e => {
       break;
     case 'cycle-buoy':   cycleBuoy(); break;
     case 'refresh':      render(); break;
+    case 'zoom-in':      zoomBy(1.6); break;
+    case 'zoom-out':     zoomBy(1 / 1.6); break;
+    case 'zoom-next':    jumpToBuoy(); break;
     case 'deploy':       doDeploy(buoy(), false); break;
     case 'simulate':
       state.boost[state.buoyId] = 1.5;

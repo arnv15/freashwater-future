@@ -8,7 +8,7 @@
 <meta name="description" content="Freshwater Future Tracker: live water-quality telemetry, AI bloom-risk prediction, cartridge intervention logging and multi-reservoir fleet management for the BloomGuard autonomous buoy." />
 <!-- ?v= is a cache buster: bump it after editing any asset, otherwise the
      browser will happily keep running the previous copy. -->
-<link rel="stylesheet" href="assets/styles.css?v=10" />
+<link rel="stylesheet" href="assets/styles.css?v=13" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>" />
 </head>
 <body>
@@ -35,7 +35,7 @@
       <li data-goto="sensors"><span class="dot dot--teal"></span><b>Live Sensor Dashboard</b><small>pH · DO · VOC · bloom-risk score</small></li>
       <li data-goto="alerts"><span class="dot dot--amber"></span><b>Threshold Alerts</b><small>Push notification before a bloom surfaces</small></li>
       <li data-goto="cartridges"><span class="dot dot--leaf"></span><b>Cartridge Log</b><small>Deployments, retrieval, remaining capacity</small></li>
-      <li data-goto="fleet"><span class="dot dot--coral"></span><b>Fleet View</b><small>Every buoy across every reservoir</small></li>
+      <li data-goto="home"><span class="dot dot--coral"></span><b>Fleet Map</b><small>Zoom the globe, tap any buoy</small></li>
     </ul>
 
     <div class="stage__hint">
@@ -81,10 +81,9 @@
                     <small id="drawerOrg">Toledo Water Authority</small>
                   </div>
                 </div>
-                <a data-goto="home"><svg viewBox="0 0 24 24"><use href="#ic-home"/></svg>Home</a>
+                <a data-goto="home"><svg viewBox="0 0 24 24"><use href="#ic-pin"/></svg>Fleet Map</a>
                 <a data-goto="sensors"><svg viewBox="0 0 24 24"><use href="#ic-wave"/></svg>Live Sensors</a>
-                <a data-goto="analytics"><svg viewBox="0 0 24 24"><use href="#ic-chart"/></svg>Analytics</a>
-                <a data-goto="fleet"><svg viewBox="0 0 24 24"><use href="#ic-pin"/></svg>Fleet View</a>
+                <a data-goto="analytics"><svg viewBox="0 0 24 24"><use href="#ic-chart"/></svg>Statistics</a>
                 <a data-goto="alerts"><svg viewBox="0 0 24 24"><use href="#ic-bell"/></svg>Alerts</a>
                 <a data-goto="cartridges"><svg viewBox="0 0 24 24"><use href="#ic-cartridge"/></svg>Cartridge Log</a>
                 <a data-goto="harvest"><svg viewBox="0 0 24 24"><use href="#ic-leaf"/></svg>Harvest &amp; Biogas</a>
@@ -174,7 +173,7 @@
   <symbol id="ic-battery" viewBox="0 0 28 14"><rect x="1" y="2" width="22" height="10" rx="3" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.2"/><rect x="2.6" y="3.6" width="17" height="6.8" rx="1.8" fill="currentColor"/><path fill="currentColor" fill-opacity=".45" d="M24.6 5.2c1.2.3 1.8 1 1.8 1.8s-.6 1.5-1.8 1.8V5.2Z"/></symbol>
 </svg>
 
-<script src="assets/data.js?v=10"></script>
-<script src="assets/app.js?v=10"></script>
+<script src="assets/data.js?v=13"></script>
+<script src="assets/app.js?v=13"></script>
 </body>
 </html>
