@@ -97,8 +97,22 @@ If you present this, say it is a working interface prototype over a simulated fe
 ```
 index.html          markup, iPhone frame, SVG icon sprite
 assets/styles.css   all styling
-assets/data.js      sensor specs, fleet, cartridges, risk model
+assets/data.js      sensor specs, fleet, cartridges, risk model, projection
+assets/geo.js       generated coastlines + political boundaries
 assets/app.js       screens, router, charts, simulation loop, notifications
 ```
 
 Charts are hand-rolled SVG — no chart library, no CDN, works offline.
+
+## Map data
+
+`assets/geo.js` is generated from [Natural Earth](https://www.naturalearthdata.com/)
+1:110m `land` and `admin_0_boundary_lines_land`, which are **public domain** — no
+attribution required, though it is good practice to credit them. The rings were
+simplified with Douglas-Peucker at 0.45° and rounded to two decimals, which gets
+68 coastlines and 333 border segments into ~44 KB. It is committed as generated
+output so the app still has no build step and no network dependency.
+
+To regenerate at a different level of detail, re-download those two GeoJSON files
+and re-run the simplification with a smaller tolerance — 0.45° is tuned for a
+phone-sized world map, not for zooming into a single lake.

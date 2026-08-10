@@ -599,10 +599,25 @@ function pinsMarkup(rows, s){
   }).join('');
 }
 
+/* Geometry is static, so build the path strings once. Each layer is a
+   single <path> with many subpaths rather than one node per ring —
+   68 coastlines and 333 border segments as separate elements would be
+   ~400 nodes to re-style on every frame. */
+let GEO_CACHE = null;
+function geoPaths(){
+  if (GEO_CACHE) return GEO_CACHE;
+  const pt = p => BB.projX(p[0]).toFixed(2) + ' ' + BB.projY(p[1]).toFixed(2);
+  const ring = r => r.map((p, i) => (i ? 'L' : 'M') + pt(p)).join(' ') + 'Z';
+  const line = l => l.map((p, i) => (i ? 'L' : 'M') + pt(p)).join(' ');
+  GEO_CACHE = {
+    land: BB.LAND.map(ring).join(' '),
+    borders: BB.BORDERS.map(line).join(' ')
+  };
+  return GEO_CACHE;
+}
+
 function worldMap(rows){
-  const rings = BB.LANDMASSES.map(ring =>
-    `<path d="${ring.map((p, i) => (i ? 'L' : 'M') + BB.projX(p[0]).toFixed(1) + ' ' + BB.projY(p[1]).toFixed(1)).join(' ')}Z"/>`
-  ).join('');
+  const geo = geoPaths();
 
   let grat = '';
   for (let lon = -150; lon <= 150; lon += 30){
@@ -644,12 +659,13 @@ function worldMap(rows){
       <g class="wm-grat">${grat}</g>
       <line class="wm-eq" x1="0" y1="90" x2="360" y2="90" vector-effect="non-scaling-stroke"/>
 
-      <!-- continental shelf: the same rings stroked wide-to-narrow in
+      <!-- continental shelf: the same outline stroked wide-to-narrow in
            white gives coastlines a soft glow instead of a hard edge -->
-      <g class="wm-shelf wm-shelf--3">${rings}</g>
-      <g class="wm-shelf wm-shelf--2">${rings}</g>
-      <g class="wm-shelf wm-shelf--1">${rings}</g>
-      <g class="wm-land">${rings}</g>
+      <path class="wm-shelf wm-shelf--3" d="${geo.land}"/>
+      <path class="wm-shelf wm-shelf--2" d="${geo.land}"/>
+      <path class="wm-shelf wm-shelf--1" d="${geo.land}"/>
+      <path class="wm-landp" d="${geo.land}" fill-rule="evenodd"/>
+      <path class="wm-borders" d="${geo.borders}"/>
 
       <g id="wmPins"></g>
     </svg>

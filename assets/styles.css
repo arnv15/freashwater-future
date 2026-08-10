@@ -512,14 +512,22 @@ kbd{
 .map-zoom button:active{background:var(--aqua-100);}
 .map-zoom button svg{width:17px;height:17px;}
 
-.wm-land path{fill:url(#wmLand);stroke:#BFC6A4;stroke-width:.7;stroke-linejoin:round;
+.wm-landp{fill:url(#wmLand);stroke:#B9C2A0;stroke-width:.7;stroke-linejoin:round;
   vector-effect:non-scaling-stroke;}
 
 /* coastal shelf glow — three passes, widest and faintest first */
-.wm-shelf path{fill:none;stroke:#fff;stroke-linejoin:round;vector-effect:non-scaling-stroke;}
-.wm-shelf--3 path{stroke-width:11;opacity:.10;}
-.wm-shelf--2 path{stroke-width:6;opacity:.16;}
-.wm-shelf--1 path{stroke-width:2.5;opacity:.30;}
+.wm-shelf{fill:none;stroke:#fff;stroke-linejoin:round;vector-effect:non-scaling-stroke;}
+.wm-shelf--3{stroke-width:11;opacity:.10;}
+.wm-shelf--2{stroke-width:6;opacity:.16;}
+.wm-shelf--1{stroke-width:2.5;opacity:.30;}
+
+/* political boundaries — dashed hairline, deliberately quieter than
+   the coastline so country shapes read without competing with it */
+.wm-borders{
+  fill:none;stroke:#A9A483;stroke-width:.8;opacity:.75;
+  stroke-dasharray:3 2.2;stroke-linecap:round;stroke-linejoin:round;
+  vector-effect:non-scaling-stroke;
+}
 
 .wm-grat line{stroke:#fff;stroke-width:.7;opacity:.30;}
 .wm-eq{stroke:#fff;stroke-width:1;opacity:.5;stroke-dasharray:5 4;}
