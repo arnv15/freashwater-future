@@ -682,11 +682,17 @@ function worldMap(rows){
 let mapRows = [];
 let lastPinScale = -1;
 
-function applyMapView(force){
+function applyMapView(force, tries){
   const wrap = $('#worldmap'), svg = $('#wmSvg');
   if (!wrap || !svg) return;
   const rect = wrap.getBoundingClientRect();
-  if (!rect.width || !rect.height) return;
+  /* Called straight after innerHTML the container can still be unsized.
+     Bailing without a retry left the markers permanently unrendered. */
+  if (!rect.width || !rect.height){
+    const n = tries || 0;
+    if (n < 30) requestAnimationFrame(() => applyMapView(force, n + 1));
+    return;
+  }
   const win = mapWindow(rect);
   svg.setAttribute('viewBox',
     `${win.x.toFixed(3)} ${win.y.toFixed(3)} ${win.w.toFixed(3)} ${win.h.toFixed(3)}`);
