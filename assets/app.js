@@ -34,7 +34,7 @@ const state = {
   thresholds:{ risk:65, autoDeploy:true, pushEnabled:true, quiet:false, doFloor:5.0 },
   tickCount:0,
   /* map window: centre in map units (deg) + zoom, 1 = full latitude */
-  map:{ cx:80, cy:90, zoom:1, focusIdx:null }
+  map:{ cx:80, cy:90, zoom:1, focusIdx:null, selected:null }
 };
 
 BB.FLEET.forEach(b => {
@@ -517,7 +517,7 @@ function ScreenAnalytics(){
    ============================================================ */
 const WORLD = { w:360, h:180 };
 const PIN_SEP_PX = 26;      /* keep markers this far apart on screen */
-const MAX_ZOOM = 12;
+const MAX_ZOOM = 8;   /* coastlines are coarse; past this it just looks blocky */
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -565,33 +565,42 @@ function layoutPins(rows, minSep){
 }
 
 /* Markers are drawn at origin and scaled by `s` so they stay the same
-   size on screen at every zoom level. */
+   size on screen at every zoom level. Names appear once there is room
+   for them, which is roughly zoom 1.8 and up. */
 function pinsMarkup(rows, s){
+  const showLabels = state.map.zoom >= 1.8;
   return layoutPins(rows, PIN_SEP_PX * s).map(p => {
     const off = Math.sqrt((p.mx - p.x) ** 2 + (p.my - p.y) ** 2) > s * 2;
     const hot = p.band.key === 'crit' || p.band.key === 'high';
-    return `<g class="wm-pin" data-pin="${p.id}" role="button" tabindex="0"
+    const sel = p.id === state.map.selected;
+    return `<g class="wm-pin ${sel ? 'is-sel' : ''}" data-pin="${p.id}" role="button" tabindex="0"
                aria-label="${esc(p.name)}, bloom risk ${p.risk}">
       <title>${esc(p.name)} — risk ${p.risk}</title>
       ${off ? `<line class="wm-lead" x1="${p.x.toFixed(2)}" y1="${p.y.toFixed(2)}"
                      x2="${p.mx.toFixed(2)}" y2="${p.my.toFixed(2)}"
                      stroke="${p.band.color}" vector-effect="non-scaling-stroke"/>
                <g transform="translate(${p.x.toFixed(2)},${p.y.toFixed(2)}) scale(${s})">
-                 <circle r="1.6" fill="${p.band.color}" opacity=".9"/>
+                 <circle r="2.6" fill="#fff"/><circle r="1.5" fill="${p.band.color}"/>
                </g>` : ''}
       <g transform="translate(${p.mx.toFixed(2)},${p.my.toFixed(2)}) scale(${s})">
-        ${hot ? `<circle class="wm-ping" r="5" fill="${p.band.color}"/>` : ''}
-        <circle class="wm-halo" r="7" fill="#fff"/>
-        <circle r="5" fill="${p.band.color}"/>
-        <circle r="1.9" fill="#fff"/>
-        <circle r="13" fill="transparent"/>
+        ${hot ? `<circle class="wm-ping" r="6" fill="${p.band.color}"/>` : ''}
+        <g filter="url(#wmPinShadow)">
+          <circle class="wm-halo" r="8" fill="#fff"/>
+          <circle r="6.1" fill="${p.band.color}"/>
+          <circle r="6.1" fill="url(#wmPinGloss)"/>
+          <circle r="2.1" fill="#fff" opacity=".95"/>
+        </g>
+        ${sel ? `<circle class="wm-ring" r="12" fill="none" stroke="${p.band.color}" stroke-width="1.6" opacity=".9"/>` : ''}
+        ${showLabels ? `<text class="wm-label" x="13" y="4.6" paint-order="stroke"
+              stroke="#F4FAFD" stroke-width="3.4" stroke-linejoin="round">${esc(p.name)}</text>` : ''}
+        <circle r="14" fill="transparent"/>
       </g>
     </g>`;
   }).join('');
 }
 
 function worldMap(rows){
-  const land = BB.LANDMASSES.map(ring =>
+  const rings = BB.LANDMASSES.map(ring =>
     `<path d="${ring.map((p, i) => (i ? 'L' : 'M') + BB.projX(p[0]).toFixed(1) + ' ' + BB.projY(p[1]).toFixed(1)).join(' ')}Z"/>`
   ).join('');
 
@@ -606,17 +615,57 @@ function worldMap(rows){
   return `<div class="worldmap" id="worldmap">
     <svg id="wmSvg" viewBox="0 0 360 180" preserveAspectRatio="none"
          role="img" aria-label="World map of ${rows.length} monitoring buoys">
-      <rect x="0" y="0" width="360" height="180" fill="#CFE4EF"/>
+      <defs>
+        <!-- userSpaceOnUse so the ramp tracks latitude, not the oversized
+             backdrop rect: warm and shallow at the equator, colder toward
+             the poles, and it clamps naturally past them -->
+        <linearGradient id="wmSea" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="180">
+          <stop offset="0"   stop-color="#8FB9D4"/>
+          <stop offset=".28" stop-color="#B4D6E8"/>
+          <stop offset=".5"  stop-color="#CBE5F1"/>
+          <stop offset=".72" stop-color="#B4D6E8"/>
+          <stop offset="1"   stop-color="#8FB9D4"/>
+        </linearGradient>
+        <linearGradient id="wmLand" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="180">
+          <stop offset="0"  stop-color="#EDEEDC"/>
+          <stop offset=".5" stop-color="#F4F2E3"/>
+          <stop offset="1"  stop-color="#E6E8D2"/>
+        </linearGradient>
+        <radialGradient id="wmPinGloss" cx=".35" cy=".3" r=".8">
+          <stop offset="0" stop-color="#fff" stop-opacity=".45"/>
+          <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+        </radialGradient>
+        <filter id="wmPinShadow" x="-70%" y="-70%" width="240%" height="240%">
+          <feDropShadow dx="0" dy="1.4" stdDeviation="1.3" flood-color="#06293F" flood-opacity=".38"/>
+        </filter>
+      </defs>
+
+      <rect x="-400" y="-400" width="1160" height="980" fill="url(#wmSea)"/>
       <g class="wm-grat">${grat}</g>
       <line class="wm-eq" x1="0" y1="90" x2="360" y2="90" vector-effect="non-scaling-stroke"/>
-      <g class="wm-land">${land}</g>
+
+      <!-- continental shelf: the same rings stroked wide-to-narrow in
+           white gives coastlines a soft glow instead of a hard edge -->
+      <g class="wm-shelf wm-shelf--3">${rings}</g>
+      <g class="wm-shelf wm-shelf--2">${rings}</g>
+      <g class="wm-shelf wm-shelf--1">${rings}</g>
+      <g class="wm-land">${rings}</g>
+
       <g id="wmPins"></g>
     </svg>
 
     <div class="map-zoom">
-      <button data-action="zoom-in"  aria-label="Zoom in">+</button>
-      <button data-action="zoom-out" aria-label="Zoom out">&minus;</button>
-      <button data-action="zoom-next" aria-label="Jump to next buoy" title="Jump to next buoy">${ic('ic-pin')}</button>
+      <button data-action="zoom-in" aria-label="Zoom in">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor"
+             stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+      <button data-action="zoom-out" aria-label="Zoom out">
+        <svg viewBox="0 0 24 24"><path d="M5 12h14" fill="none" stroke="currentColor"
+             stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+      <button data-action="zoom-next" aria-label="Jump to next buoy" title="Jump to next buoy">
+        ${ic('ic-pin')}
+      </button>
     </div>
 
     <div class="map-legend">
@@ -663,7 +712,7 @@ function zoomBy(factor, clientX, clientY){
   const after = mapWindow(rect);
   state.map.cx = ax - (px / rect.width - 0.5) * after.w;
   state.map.cy = ay - (py / rect.height - 0.5) * after.h;
-  applyMapView();
+  applyMapView(true);
 }
 
 /* The fleet spans 240deg of longitude but the zoom-1 window is only as
@@ -1391,6 +1440,8 @@ function openSheet(id){
     </div>`;
 
   $('#sheet').hidden = false;
+  state.map.selected = id;
+  applyMapView(true);
 }
 
 function closeSheet(){
@@ -1399,6 +1450,8 @@ function closeSheet(){
   const panel = $('#sheetPanel');
   panel.classList.add('is-out');
   setTimeout(() => { panel.classList.remove('is-out'); s.hidden = true; }, 220);
+  state.map.selected = null;
+  applyMapView(true);
 }
 
 function openDrawer(){

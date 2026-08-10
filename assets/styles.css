@@ -493,37 +493,55 @@ kbd{
 .view--map{padding:0;overflow:hidden;display:flex;}
 /* the shared slide-up entry would leave 9px of phantom scroll overflow here */
 .view--map>*{animation:fadeIn .3s both;}
-.worldmap{position:relative;flex:1 1 auto;min-height:0;background:#9FC4D8;line-height:0;}
+.worldmap{position:relative;flex:1 1 auto;min-height:0;background:#9EC6DE;line-height:0;overflow:hidden;}
 .worldmap svg{width:100%;height:100%;display:block;cursor:grab;touch-action:none;}
 .worldmap svg:active{cursor:grabbing;}
 
 .map-zoom{
-  position:absolute;right:12px;top:12px;display:grid;gap:1px;
-  border-radius:11px;overflow:hidden;box-shadow:0 4px 14px rgba(6,42,69,.2);
+  position:absolute;right:12px;top:12px;z-index:2;display:grid;
+  border-radius:13px;overflow:hidden;
+  background:rgba(255,255,255,.82);backdrop-filter:blur(14px) saturate(160%);
+  box-shadow:0 6px 20px rgba(6,42,69,.22),0 0 0 .5px rgba(255,255,255,.7) inset;
 }
 .map-zoom button{
-  width:34px;height:34px;display:grid;place-items:center;
-  background:rgba(255,255,255,.94);backdrop-filter:blur(8px);
-  color:var(--ocean-700);font-size:18px;font-weight:700;line-height:1;
+  width:36px;height:36px;display:grid;place-items:center;
+  color:var(--ocean-700);transition:background .15s;
 }
-.map-zoom button:hover{background:#fff;}
+.map-zoom button+button{border-top:1px solid rgba(11,60,93,.10);}
+.map-zoom button:hover{background:rgba(255,255,255,.75);}
 .map-zoom button:active{background:var(--aqua-100);}
-.map-zoom button svg{width:15px;height:15px;}
+.map-zoom button svg{width:17px;height:17px;}
 
-.wm-land path{fill:#E7EEDA;stroke:#C4D6AC;stroke-width:.6;stroke-linejoin:round;}
-.wm-grat line{stroke:#B7D5E3;stroke-width:.4;}
-.wm-eq{stroke:#9CC3D6;stroke-width:.6;stroke-dasharray:3 2;}
-.wm-lead{stroke-width:.8;opacity:.6;}
-.wm-anchor{opacity:.9;}
-.wm-halo{opacity:.95;}
+.wm-land path{fill:url(#wmLand);stroke:#BFC6A4;stroke-width:.7;stroke-linejoin:round;
+  vector-effect:non-scaling-stroke;}
+
+/* coastal shelf glow — three passes, widest and faintest first */
+.wm-shelf path{fill:none;stroke:#fff;stroke-linejoin:round;vector-effect:non-scaling-stroke;}
+.wm-shelf--3 path{stroke-width:11;opacity:.10;}
+.wm-shelf--2 path{stroke-width:6;opacity:.16;}
+.wm-shelf--1 path{stroke-width:2.5;opacity:.30;}
+
+.wm-grat line{stroke:#fff;stroke-width:.7;opacity:.30;}
+.wm-eq{stroke:#fff;stroke-width:1;opacity:.5;stroke-dasharray:5 4;}
+.wm-lead{stroke-width:1.1;opacity:.75;}
 .wm-pin{cursor:pointer;}
-.wm-pin:hover .wm-halo{r:7;}
 .wm-pin:focus{outline:none;}
-.wm-pin:focus .wm-halo{stroke:var(--ocean-700);stroke-width:1.2;}
-@keyframes wmripple{0%{r:4.5;opacity:.5;}100%{r:12;opacity:0;}}
+.wm-pin:focus .wm-halo{stroke:var(--ocean-800);stroke-width:1.4;}
+.wm-label{
+  font-family:var(--font);font-size:12px;font-weight:750;fill:var(--ocean-800);
+  pointer-events:none;letter-spacing:-.2px;
+}
+@keyframes wmripple{0%{r:6;opacity:.55;}100%{r:15;opacity:0;}}
 .wm-ping{animation:wmripple 2.6s ease-out infinite;}
+@keyframes wmSelect{from{opacity:0;transform:scale(.55);}to{opacity:.9;transform:scale(1);}}
+.wm-ring{animation:wmSelect .3s cubic-bezier(.2,1.3,.4,1) both;transform-origin:center;transform-box:fill-box;}
 
-/* floating overlays on the map */
+/* soft edge so the map sits inside the screen rather than butting against it */
+.worldmap::after{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:1;
+  box-shadow:inset 0 0 44px rgba(11,60,93,.16), inset 0 0 8px rgba(11,60,93,.10);
+}
+
 .map-legend{
   position:absolute;left:12px;bottom:12px;display:grid;gap:4px;
   padding:9px 12px;border-radius:12px;line-height:1.2;
@@ -535,7 +553,10 @@ kbd{
   font-size:8.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
   color:var(--muted);margin-bottom:1px;
 }
-.map-legend i{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;}
+.map-legend i{
+  width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:7px;flex:0 0 auto;
+  box-shadow:0 0 0 2px rgba(255,255,255,.9),0 1px 3px rgba(6,42,69,.3);
+}
 
 /* ============================ BUOY SHEET ============================ */
 .sheet{position:absolute;inset:0;z-index:75;}
@@ -805,7 +826,7 @@ input[type=range]::-moz-range-thumb{
 
 /* transient buoy label when jumping around the map */
 .map-flash{
-  position:absolute;top:12px;left:50%;transform:translateX(-50%);
+  position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:3;
   padding:7px 14px;border-radius:999px;white-space:nowrap;
   background:rgba(11,60,93,.88);backdrop-filter:blur(8px);color:#fff;
   font-size:11.5px;font-weight:700;letter-spacing:-.1px;
