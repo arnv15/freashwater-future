@@ -284,12 +284,51 @@ function tile(key, hist, wide){
   </div>`;
 }
 
+/* Horizontal buoy picker pinned to the top of the sensor dashboard.
+   Sorted worst-first so the basin that needs attention is the one you
+   land on when you flick to the start. */
+function buoyRail(){
+  const rows = BB.FLEET.map(b => {
+    const risk = riskOf(b.id);
+    return { b, risk, band: BB.riskBand(risk) };
+  }).sort((x, y) => y.risk - x.risk);
+
+  return `<div class="railwrap">
+    <div class="buoyrail" id="buoyrail" role="tablist" aria-label="Select buoy">
+      ${rows.map(({ b, risk, band }) => `
+        <button class="buoychip ${b.id === state.buoyId ? 'is-on' : ''}"
+                data-pick="${b.id}" role="tab"
+                aria-selected="${b.id === state.buoyId}"
+                aria-label="${esc(b.name)}, bloom risk ${risk}">
+          <span class="buoychip__head">
+            <i data-chip-dot="${b.id}" style="background:${band.color}"></i>
+            <b>${esc(b.name)}</b>
+          </span>
+          <span class="buoychip__val" data-chip-risk="${b.id}" style="color:${band.color}">${risk}</span>
+          <small>${esc(b.id)} · <span data-chip-band="${b.id}">${band.label}</span></small>
+        </button>`).join('')}
+    </div>
+  </div>`;
+}
+
+/* Centre the active chip without touching the parent scroller —
+   scrollIntoView would drag the whole view with it. */
+function centreChip(){
+  const rail = $('#buoyrail');
+  if (!rail) return;
+  const on = $('.buoychip.is-on', rail);
+  if (!on) return;
+  rail.scrollLeft = on.offsetLeft - (rail.clientWidth - on.offsetWidth) / 2;
+}
+
 function ScreenSensors(){
   const b = buoy(), hist = state.hist[b.id], r = readings(), risk = riskOf(), band = BB.riskBand(risk);
   const drivers = BB.riskDrivers(r).slice(0, 5);
   const canDeploy = b.cartridges > 0;
 
   const body = `
+    ${buoyRail()}
+
     <div class="page-head">
       <h2>Live<span class="thin">Sensors</span></h2>
       <p>${esc(b.name)} · ${esc(b.id)} · ${BB.coord(b.lat, b.lon)}</p>
@@ -1111,6 +1150,7 @@ function render(){
   screenEl.classList.remove('sb-brand');
   app.innerHTML = (SCREENS[state.screen] || ScreenHome)();
   const v = $('#view'); if (v) v.scrollTop = 0;
+  if (state.screen === 'sensors') centreChip();
   if (state.screen === 'home'){
     initMap(BB.FLEET.map(b => {
       const risk = riskOf(b.id);
@@ -1144,6 +1184,16 @@ function updateLive(){
   }
 
   if (state.screen === 'sensors'){
+    BB.FLEET.forEach(b => {
+      const rk = riskOf(b.id), bd = BB.riskBand(rk);
+      const num = $(`[data-chip-risk="${b.id}"]`);
+      if (num){ num.textContent = rk; num.style.color = bd.color; }
+      const lbl = $(`[data-chip-band="${b.id}"]`);
+      if (lbl) lbl.textContent = bd.label;
+      const dot = $(`[data-chip-dot="${b.id}"]`);
+      if (dot) dot.style.background = bd.color;
+    });
+
     const hist = state.hist[state.buoyId];
     for (const key in BB.SENSORS){
       const arr = hist[key]; if (!arr) continue;
@@ -1527,6 +1577,21 @@ document.addEventListener('click', e => {
     const soft = goEl.getAttribute('data-buoy-soft');
     if (soft && BB.FLEET.some(b => b.id === soft)) state.buoyId = soft;
     go(goEl.getAttribute('data-goto'));
+    return;
+  }
+
+  /* buoy rail chip -> switch the dashboard's subject */
+  const pickEl = t.closest('[data-pick]');
+  if (pickEl){
+    const id = pickEl.getAttribute('data-pick');
+    if (id !== state.buoyId){
+      const v = $('#view');
+      const keep = v ? v.scrollTop : 0;
+      state.buoyId = id;
+      render();
+      const v2 = $('#view');
+      if (v2) v2.scrollTop = keep;   /* re-render resets it; put it back */
+    }
     return;
   }
 
