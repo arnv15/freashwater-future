@@ -6,9 +6,10 @@
      · sensor suite  : pH, DO, temp, turbidity, nitrate, phosphate,
                        chlorophyll-a / phycocyanin fluorometer, AVOCs
      · prediction    : gradient-boosted bloom-risk score (0-100)
-     · intervention  : algicidal-bacteria cartridge (strain 6A1)
-     · recovery      : skimmer -> holding tank -> shore anaerobic
-                       digester -> biogas (~65% CH4)
+     · intervention  : nanobubble aeration — microbubbles collapse,
+                       lysing the cyanobacteria and reoxygenating the
+                       column. Nothing is skimmed or carried away; the
+                       biomass remineralises in place.
    ============================================================ */
 
 const BB = {};
@@ -41,51 +42,55 @@ BB.RISK_WEIGHTS = {
 /* ---------------------------------------------------------------
    2. FLEET
    --------------------------------------------------------------- */
-/* Cartridge bay size and dose volume, shared by every buoy. */
-BB.CART_BAY = 6;
-BB.CART_LITRES = 0.5;
+/* Nanobubble generator specs, shared by every buoy.
+   The generator is solar-powered, so treatment capacity is bounded by
+   runtime available from battery + charge, not by a consumable. */
+BB.NB_RUNTIME_CAP = 12;      /* hours of continuous aeration on a full charge */
+BB.NB_FLOW = 420;            /* m3 of water treated per hour of aeration */
+BB.NB_O2_RATE = 1.8;         /* kg of O2 dispersed per hour */
+BB.DO_FLOOR = 5.0;           /* mg/L — below this a basin is heading for hypoxia */
 
 BB.FLEET = [
   {
-    id:'BG-014', tankCap:140, name:'Maumee Bay', water:'Lake Erie — Western Basin',
+    id:'BG-014', name:'Maumee Bay', water:'Lake Erie — Western Basin',
     lat:41.6870, lon:-83.2341, org:'Toledo Water Authority',
     x:30, y:34, deployed:'2026-04-11', battery:87, solar:23.4,
-    tank:62, cartridges:4, seed:{ ph:8.35, do:6.4, voc:26.5, temp:24.6, chl:31, pc:14.5, turbidity:19, nitrate:2.4, phosphate:0.098 },
+    nbState:'active', runtime:7.4, diffuser:88, treatedToday:3110, seed:{ ph:8.35, do:6.4, voc:26.5, temp:24.6, chl:31, pc:14.5, turbidity:19, nitrate:2.4, phosphate:0.098 },
     trend:'rising', depth:3.2
   },
   {
-    id:'BG-021', tankCap:110, name:'Grand Lake St. Marys', water:'Mercer County, OH',
+    id:'BG-021', name:'Grand Lake St. Marys', water:'Mercer County, OH',
     lat:40.5395, lon:-84.4977, org:'Ohio EPA',
     x:58, y:52, deployed:'2026-03-28', battery:74, solar:19.1,
-    tank:38, cartridges:2, seed:{ ph:8.05, do:7.6, voc:16.2, temp:23.1, chl:17, pc:6.2, turbidity:14, nitrate:1.8, phosphate:0.061 },
+    nbState:'idle', runtime:3.1, diffuser:94, treatedToday:1300, seed:{ ph:8.05, do:7.6, voc:16.2, temp:23.1, chl:17, pc:6.2, turbidity:14, nitrate:1.8, phosphate:0.061 },
     trend:'rising', depth:2.4
   },
   {
-    id:'BG-007', tankCap:110, name:'Chautauqua Lake', water:'Chautauqua County, NY',
+    id:'BG-007', name:'Chautauqua Lake', water:'Chautauqua County, NY',
     lat:42.1620, lon:-79.4050, org:'CLP Alliance',
     x:74, y:26, deployed:'2026-05-02', battery:91, solar:26.8,
-    tank:12, cartridges:6, seed:{ ph:7.62, do:9.1, voc:8.4, temp:21.2, chl:8.5, pc:2.1, turbidity:7, nitrate:0.9, phosphate:0.028 },
+    nbState:'idle', runtime:1.2, diffuser:97, treatedToday:505, seed:{ ph:7.62, do:9.1, voc:8.4, temp:21.2, chl:8.5, pc:2.1, turbidity:7, nitrate:0.9, phosphate:0.028 },
     trend:'steady', depth:4.1
   },
   {
-    id:'BG-033', tankCap:140, name:'Clear Lake', water:'Lake County, CA',
+    id:'BG-033', name:'Clear Lake', water:'Lake County, CA',
     lat:39.0219, lon:-122.7580, org:'Big Valley Band EPA',
     x:16, y:68, deployed:'2026-02-17', battery:63, solar:31.2,
-    tank:81, cartridges:1, seed:{ ph:8.58, do:5.2, voc:38.1, temp:26.9, chl:47, pc:23.4, turbidity:27, nitrate:3.1, phosphate:0.142 },
+    nbState:'active', runtime:9.8, diffuser:71, treatedToday:4115, seed:{ ph:8.58, do:5.2, voc:38.1, temp:26.9, chl:47, pc:23.4, turbidity:27, nitrate:3.1, phosphate:0.142 },
     trend:'rising', depth:2.0
   },
   {
-    id:'BG-046', tankCap:160, name:'Lake Chaohu', water:'Anhui Province, CN',
+    id:'BG-046', name:'Lake Chaohu', water:'Anhui Province, CN',
     lat:31.5500, lon:117.5500, org:'Chaohu Basin Authority',
     x:88, y:70, deployed:'2026-01-09', battery:55, solar:14.7,
-    tank:29, cartridges:3, seed:{ ph:7.88, do:8.2, voc:12.9, temp:22.4, chl:12.5, pc:4.4, turbidity:11, nitrate:1.4, phosphate:0.044 },
+    nbState:'idle', runtime:2.6, diffuser:83, treatedToday:1090, seed:{ ph:7.88, do:8.2, voc:12.9, temp:22.4, chl:12.5, pc:4.4, turbidity:11, nitrate:1.4, phosphate:0.044 },
     trend:'falling', depth:3.6
   },
   {
-    id:'BG-052', tankCap:110, name:'Milford Reservoir', water:'Geary County, KS',
+    id:'BG-052', name:'Milford Reservoir', water:'Geary County, KS',
     lat:39.0747, lon:-96.9050, org:'Kansas DHE',
     x:44, y:80, deployed:'2026-06-20', battery:96, solar:28.3,
-    tank:5, cartridges:6, seed:{ ph:7.41, do:9.8, voc:5.1, temp:19.8, chl:5.2, pc:1.2, turbidity:5, nitrate:0.6, phosphate:0.019 },
+    nbState:'offline', runtime:0.0, diffuser:62, treatedToday:0, seed:{ ph:7.41, do:9.8, voc:5.1, temp:19.8, chl:5.2, pc:1.2, turbidity:5, nitrate:0.6, phosphate:0.019 },
     trend:'steady', depth:5.4
   }
 ];
@@ -101,29 +106,31 @@ BB.projX = lon => lon + 180;
 BB.projY = lat => 90 - lat;
 
 /* ---------------------------------------------------------------
-   3. CARTRIDGE LOG
-   Algicidal-bacteria cartridges. `state` follows the physical
-   lifecycle: loaded -> deployed -> spent -> retrieved.
+   3. NANOBUBBLE RELEASE LOG
+   A release is a burst of aeration, not a consumable. `state` follows
+   scheduled -> active -> complete. There is nothing to retrieve: the
+   bubbles collapse, the cyanobacteria lyse, and the biomass
+   remineralises into the water column in place.
    --------------------------------------------------------------- */
-BB.CARTRIDGES = [
-  { id:'CT-2291', buoy:'BG-014', strain:'6A1', state:'deployed',  loaded:'2026-08-01', deployed:'2026-08-05 04:12',
-    retrieved:null, dose:0.42, capacity:58, trigger:'Risk 74 → auto-release', kill:null,
-    note:'Released at 1.4 m depth over the north shoal. Lysis window still open.' },
-  { id:'CT-2288', buoy:'BG-014', strain:'6A1', state:'retrieved', loaded:'2026-07-19', deployed:'2026-07-22 06:40',
-    retrieved:'2026-07-24 11:05', dose:0.50, capacity:0, trigger:'Risk 81 → operator approved', kill:78,
-    note:'78% chlorophyll knockdown in 26 h. Housing recovered intact, seals reusable.' },
-  { id:'CT-2274', buoy:'BG-021', strain:'6A1', state:'spent',     loaded:'2026-07-08', deployed:'2026-07-11 05:55',
-    retrieved:null, dose:0.36, capacity:0, trigger:'Risk 69 → auto-release', kill:64,
-    note:'Awaiting retrieval on next service run. Empty housing tethered at buoy.' },
-  { id:'CT-2301', buoy:'BG-007', strain:'6A1', state:'loaded',    loaded:'2026-08-03', deployed:null,
-    retrieved:null, dose:0.50, capacity:100, trigger:'—', kill:null,
-    note:'Fresh cartridge, cold-chain verified. Viability assay passed at 96%.' },
-  { id:'CT-2263', buoy:'BG-033', strain:'6A1', state:'retrieved', loaded:'2026-06-25', deployed:'2026-06-28 07:20',
-    retrieved:'2026-07-01 09:15', dose:0.50, capacity:0, trigger:'Risk 88 → auto-release', kill:71,
-    note:'Heavy scum layer reduced contact efficiency. Second dose scheduled.' },
-  { id:'CT-2255', buoy:'BG-046', strain:'6A1', state:'retrieved', loaded:'2026-06-02', deployed:'2026-06-06 05:30',
-    retrieved:'2026-06-09 14:40', dose:0.44, capacity:0, trigger:'Risk 72 → operator approved', kill:83,
-    note:'Best knockdown to date. Water column mixed well after the storm front.' }
+BB.RELEASES = [
+  { id:'NB-2291', buoy:'BG-014', state:'active',    start:'2026-08-10 04:12', mins:184,
+    o2:5.5, treated:1290, doLift:null, chlDrop:null, trigger:'Risk 74 → auto-release',
+    note:'Diffuser ring running at 61% duty over the north shoal. Bubble density holding at target.' },
+  { id:'NB-2288', buoy:'BG-014', state:'complete',  start:'2026-08-07 06:40', mins:305,
+    o2:9.2, treated:2135, doLift:2.4, chlDrop:71, trigger:'Risk 81 → operator approved',
+    note:'Chlorophyll-a down 71% in 26 h and DO up 2.4 mg/L. No residue to recover.' },
+  { id:'NB-2274', buoy:'BG-021', state:'complete',  start:'2026-08-05 05:55', mins:142,
+    o2:4.3, treated:995, doLift:1.6, chlDrop:58, trigger:'Risk 69 → auto-release',
+    note:'Short burst on a rising trend. Caught it early, so a lighter dose of gas was enough.' },
+  { id:'NB-2301', buoy:'BG-007', state:'scheduled', start:'2026-08-11 05:00', mins:0,
+    o2:0, treated:0, doLift:null, chlDrop:null, trigger:'Pre-dawn window',
+    note:'Queued for the pre-dawn oxygen minimum, when the lift from aeration is largest.' },
+  { id:'NB-2263', buoy:'BG-033', state:'complete',  start:'2026-08-03 07:20', mins:412,
+    o2:12.4, treated:2880, doLift:1.1, chlDrop:44, trigger:'Risk 88 → auto-release',
+    note:'Heavy surface scum limited gas exchange. Diffuser flagged for cleaning afterwards.' },
+  { id:'NB-2255', buoy:'BG-046', state:'complete',  start:'2026-07-30 05:30', mins:268,
+    o2:8.0, treated:1875, doLift:3.1, chlDrop:83, trigger:'Risk 72 → operator approved',
+    note:'Best result to date. Water column mixed well after the storm front, so bubbles spread evenly.' }
 ];
 
 /* ---------------------------------------------------------------
@@ -132,51 +139,51 @@ BB.CARTRIDGES = [
 BB.SUMMARY = {
   daily:{
     title:['Daily','Summary'],
-    bars:[{ l:'Algae skimmed', v:6.2, c:'#3FA34D' },{ l:'Doses', v:1, c:'#3FB6D3' },{ l:'Biogas m³', v:2.4, c:'#F0A32E' }],
-    max:8,
-    collected:6.2, target:8, cUnit:'KG', cLabel:'Algae collected',
+    bars:[{ l:'Water treated m³', v:3110, c:'#3FB6D3' },{ l:'Releases', v:1, c:'#7A5AD1' },{ l:'O₂ kg', v:5.5, c:'#1B6CA8' }],
+    max:4200,
+    collected:3110, target:4200, cUnit:'M³', cLabel:'Water treated',
     series:[
       { name:'Water temp', unit:'°C', color:'#F0A32E', pts:[22.9,23.1,23.4,24.0,24.4,24.6,24.6] },
       { name:'Chlorophyll-a', unit:'µg/L', color:'#3FA34D', pts:[24,25,27,28,30,31,31] }
     ],
     xl:['00','04','08','12','16','20','24'],
-    kpis:[['Uptime','23.6 h'],['Samples','1,416'],['Peak risk','74']]
+    kpis:[['Aeration','7.4 h'],['Samples','1,416'],['Peak risk','74']]
   },
   weekly:{
     title:['Weekly','Summary'],
-    bars:[{ l:'Algae skimmed', v:40.5, c:'#3FA34D' },{ l:'Doses', v:3, c:'#3FB6D3' },{ l:'Biogas m³', v:16.8, c:'#F0A32E' }],
-    max:50,
-    collected:40.5, target:50, cUnit:'KG', cLabel:'Algae collected',
+    bars:[{ l:'Water treated m³', v:18400, c:'#3FB6D3' },{ l:'Releases', v:6, c:'#7A5AD1' },{ l:'O₂ kg', v:33.2, c:'#1B6CA8' }],
+    max:24000,
+    collected:18400, target:24000, cUnit:'M³', cLabel:'Water treated',
     series:[
       { name:'Water temp', unit:'°C', color:'#F0A32E', pts:[21.4,21.9,22.6,23.0,23.8,24.2,24.6] },
       { name:'Bloom risk', unit:'score', color:'#1B6CA8', pts:[38,42,47,53,61,68,74] }
     ],
     xl:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
-    kpis:[['Uptime','99.2%'],['Samples','9,912'],['Peak risk','74']]
+    kpis:[['Aeration','44 h'],['Samples','9,912'],['Peak risk','74']]
   },
   monthly:{
     title:['Monthly','Summary'],
-    bars:[{ l:'Algae skimmed', v:168, c:'#3FA34D' },{ l:'Doses', v:11, c:'#3FB6D3' },{ l:'Biogas m³', v:71, c:'#F0A32E' }],
-    max:200,
-    collected:168, target:200, cUnit:'KG', cLabel:'Algae collected',
+    bars:[{ l:'Water treated m³', v:76200, c:'#3FB6D3' },{ l:'Releases', v:22, c:'#7A5AD1' },{ l:'O₂ kg', v:138, c:'#1B6CA8' }],
+    max:95000,
+    collected:76200, target:95000, cUnit:'M³', cLabel:'Water treated',
     series:[
       { name:'Water temp', unit:'°C', color:'#F0A32E', pts:[17.2,18.6,19.9,21.2,22.4,23.6,24.6] },
       { name:'Bloom risk', unit:'score', color:'#1B6CA8', pts:[22,29,35,44,51,63,74] }
     ],
     xl:['W1','W2','W3','W4','W5','W6','W7'],
-    kpis:[['Uptime','98.4%'],['Samples','42,760'],['Peak risk','88']]
+    kpis:[['Aeration','182 h'],['Samples','42,760'],['Peak risk','88']]
   },
   yearly:{
     title:['Yearly','Summary'],
-    bars:[{ l:'Algae skimmed', v:1240, c:'#3FA34D' },{ l:'Doses', v:47, c:'#3FB6D3' },{ l:'Biogas m³', v:524, c:'#F0A32E' }],
-    max:1500,
-    collected:1240, target:1500, cUnit:'KG', cLabel:'Algae collected',
+    bars:[{ l:'Water treated m³', v:612000, c:'#3FB6D3' },{ l:'Releases', v:148, c:'#7A5AD1' },{ l:'O₂ kg', v:1104, c:'#1B6CA8' }],
+    max:750000,
+    collected:612000, target:750000, cUnit:'M³', cLabel:'Water treated',
     series:[
       { name:'Water temp', unit:'°C', color:'#F0A32E', pts:[4.1,7.8,13.2,19.4,24.6,18.1,9.2] },
       { name:'Bloom risk', unit:'score', color:'#1B6CA8', pts:[9,14,31,58,74,49,18] }
     ],
     xl:['Jan','Mar','May','Jul','Aug','Oct','Dec'],
-    kpis:[['Uptime','97.1%'],['Samples','512k'],['Peak risk','91']]
+    kpis:[['Aeration','1,455 h'],['Samples','512k'],['Peak risk','91']]
   }
 };
 
@@ -288,7 +295,7 @@ BB.tickHistory = function(buoy, hist, rnd, boost){
     const climb = buoy.trend === 'rising' ? drift * 0.16
                 : buoy.trend === 'falling' ? -drift * 0.14 : 0;
     const bias = spec.risk === 'low' ? -climb : climb;
-    /* `boost` drives the demo bloom event / cartridge knockdown */
+    /* `boost` drives the demo bloom event / aeration knockdown */
     const forced = spec.risk === 'low' ? -boost * drift * 3.2 : boost * drift * 3.2;
     v += bias + forced + (rnd() - 0.5) * drift * 1.35;
     v = Math.max(spec.span[0], Math.min(spec.span[1], v));

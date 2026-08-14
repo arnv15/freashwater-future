@@ -505,6 +505,25 @@ kbd{
 .capbar.capbar--light i.on{background:linear-gradient(90deg,#2C7A3F,#5FB85C);}
 .sec-note{margin:-4px 20px 10px;font-size:11.5px;color:var(--muted);line-height:1.5;}
 
+/* ---- generator state triptych ---- */
+.nbstate{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);
+  border-radius:11px;overflow:hidden;margin-top:4px;}
+.nbstate>div{background:#fff;padding:11px 6px;text-align:center;}
+.nbstate b{display:block;font-size:22px;font-weight:800;letter-spacing:-.7px;
+  font-variant-numeric:tabular-nums;line-height:1;}
+.nbstate small{display:block;font-size:9px;color:var(--muted);font-weight:700;
+  text-transform:uppercase;letter-spacing:.06em;margin-top:4px;}
+
+/* ---- live indicator bars ---- */
+.indi{display:grid;gap:6px;}
+.indi__row{display:grid;grid-template-columns:74px 1fr auto;gap:9px;align-items:center;font-size:10.5px;}
+.indi__row>span{color:var(--ink-2);font-weight:650;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;}
+.indi__row .prog{height:5px;}
+.indi__row b{font-size:11px;font-weight:750;color:var(--ocean-800);
+  font-variant-numeric:tabular-nums;white-space:nowrap;}
+.indi__row b em{font-style:normal;font-weight:600;color:var(--muted);font-size:9px;}
+
 /* ============================ LIST ROWS ============================ */
 .rows{display:grid;gap:9px;padding:0 16px 12px;}
 .row{

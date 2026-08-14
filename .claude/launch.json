@@ -3,9 +3,10 @@
   "configurations": [
     {
       "name": "freshwater-future",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8099"],
-      "port": 8099
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "exec python3 -m http.server \"${PORT:-8099}\""],
+      "port": 8099,
+      "autoPort": true
     }
   ]
 }

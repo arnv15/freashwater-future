@@ -30,7 +30,7 @@ const state = {
   lowDO:{},                // buoyId -> was under the DO floor last tick?
   cooldown:{},             // buoyId -> { risk, do } ticks until that rule may fire again
   alerts:[],
-  cartridges:BB.CARTRIDGES.map(c => Object.assign({}, c)),
+  releases:BB.RELEASES.map(r => Object.assign({}, r)),
   thresholds:{ risk:65, autoDeploy:true, pushEnabled:true, quiet:false, doFloor:5.0 },
   tickCount:0,
   /* map window: centre in map units (deg) + zoom, 1 = full latitude */
@@ -51,20 +51,20 @@ const riskOf    = id => BB.riskScore(readings(id));
 /* seed alert feed */
 state.alerts = [
   { id:'a1', sev:'crit', icon:'ic-warn',  color:'#DE3B3B', title:'Bloom risk 74 — Maumee Bay',
-    body:'Phycocyanin up 41% in 6 h with AVOC index at 26.5 ppb. Model puts a visible surface bloom 31–44 h out. Cartridge CT-2291 released automatically at 04:12.',
-    mins:22, buoy:'BG-014', unread:true, acts:[['View sensors','sensors'],['Cartridge log','cartridges']] },
+    body:'Phycocyanin up 41% in 6 h with AVOC index at 26.5 ppb. Model puts a visible surface bloom 31–44 h out. Release NB-2291 started automatically at 04:12.',
+    mins:22, buoy:'BG-014', unread:true, acts:[['View sensors','sensors'],['Release log','releases']] },
   { id:'a2', sev:'high', icon:'ic-drop',  color:'#E8562A', title:'Dissolved oxygen below floor',
     body:'BG-033 Clear Lake reading 5.2 mg/L, under the 6.0 mg/L floor for 4 consecutive samples. Overnight respiration from existing biomass is the likely driver.',
     mins:96, buoy:'BG-033', unread:true, acts:[['Open map','home']] },
-  { id:'a3', sev:'warn', icon:'ic-cartridge', color:'#F0A32E', title:'Cartridge stock low — BG-033',
-    body:'1 cartridge remaining on board and risk trending up. Schedule a resupply run before the next forecast warm spell.',
-    mins:210, buoy:'BG-033', unread:false, acts:[['Cartridge log','cartridges']] },
-  { id:'a4', sev:'info', icon:'ic-leaf',  color:'#1B6CA8', title:'Holding tank 81% full — BG-033',
-    body:'Skimmer throughput 4.8 kg/day. Return-to-shore digester run recommended within 2 days to avoid a skimmer pause.',
-    mins:340, buoy:'BG-033', unread:false, acts:[['Harvest','harvest']] },
+  { id:'a3', sev:'warn', icon:'ic-bolt', color:'#F0A32E', title:'Diffuser fouling — BG-033',
+    body:'Diffuser condition down to 71%. Coarser bubbles rise and burst instead of staying suspended, so treatment efficiency drops. Schedule a clean before the next warm spell.',
+    mins:210, buoy:'BG-033', unread:false, acts:[['Oxygen chain','oxygen']] },
+  { id:'a4', sev:'info', icon:'ic-leaf',  color:'#1B6CA8', title:'Aeration budget 82% used — BG-033',
+    body:'Aeration has run 9.8 of 12 h on today\'s solar budget. Further releases will draw the pack down overnight unless the forecast improves.',
+    mins:340, buoy:'BG-033', unread:false, acts:[['Oxygen chain','oxygen']] },
   { id:'a5', sev:'ok',   icon:'ic-check', color:'#3FA34D', title:'Knockdown confirmed — BG-046',
-    body:'Chlorophyll-a down 83% 30 h after CT-2255. Risk returned to Low. Cartridge housing retrieved and logged.',
-    mins:1490, buoy:'BG-046', unread:false, acts:[['Cartridge log','cartridges']] }
+    body:'Chlorophyll-a down 83% and DO up 3.1 mg/L, 30 h after release NB-2255. Risk returned to Low. Nothing to recover.',
+    mins:1490, buoy:'BG-046', unread:false, acts:[['Release log','releases']] }
 ];
 
 /* ============================================================
@@ -324,7 +324,7 @@ function centreChip(){
 function ScreenSensors(){
   const b = buoy(), hist = state.hist[b.id], r = readings(), risk = riskOf(), band = BB.riskBand(risk);
   const drivers = BB.riskDrivers(r).slice(0, 5);
-  const canDeploy = b.cartridges > 0;
+  const canRelease = b.nbState !== 'offline';
 
   const body = `
     ${buoyRail()}
@@ -369,8 +369,8 @@ function ScreenSensors(){
     </div>
 
     <div class="btnrow">
-      <button class="actionbtn actionbtn--danger" data-action="deploy" ${canDeploy ? '' : 'disabled'}>
-        ${ic('ic-cartridge')} Deploy cartridge
+      <button class="actionbtn actionbtn--danger" data-action="release" ${canRelease ? '' : 'disabled'}>
+        ${ic('ic-bolt')} Start release
       </button>
       <button class="actionbtn actionbtn--solid" data-action="simulate">
         ${ic('ic-bolt')} Simulate bloom
@@ -382,7 +382,9 @@ function ScreenSensors(){
       <div class="kv"><span>Battery</span><b>${b.battery}%</b></div>
       <div class="kv"><span>Solar yield today</span><b>${b.solar} Wh</b></div>
       <div class="kv"><span>Sonar depth</span><b>${b.depth} m</b></div>
-      <div class="kv"><span>Cartridges on board</span><b>${b.cartridges}</b></div>
+      <div class="kv"><span>Generator</span><b>${NB_STATE[b.nbState].label}</b></div>
+      <div class="kv"><span>Aeration today</span><b>${b.runtime.toFixed(1)} / ${BB.NB_RUNTIME_CAP} h</b></div>
+      <div class="kv"><span>Diffuser condition</span><b>${b.diffuser}%</b></div>
       <div class="kv"><span>Deployed since</span><b>${b.deployed}</b></div>
     </div>`;
 
@@ -400,32 +402,50 @@ function driversHTML(drivers){
 
 /* ============================================================
    SCREEN — STATISTICS
-   Fleet-wide first (how full are the holding tanks, how many buoys
-   are carrying a full algicide load), then per-buoy detail at the
-   bottom for anyone who wants to drill in.
+   Fleet-wide first (how much water the nanobubble generators have
+   treated, whether the basins are back above the oxygen floor), then
+   release activity, live indicator levels, and per-buoy detail.
    ============================================================ */
-function fleetTotals(){
-  const held = BB.FLEET.reduce((a, b) => a + b.tank / 100 * b.tankCap, 0);
-  const cap  = BB.FLEET.reduce((a, b) => a + b.tankCap, 0);
-  const carts = BB.FLEET.reduce((a, b) => a + b.cartridges, 0);
-  const cartCap = BB.FLEET.length * BB.CART_BAY;
+function fleetStats(){
+  const treated = BB.FLEET.reduce((a, b) => a + b.treatedToday, 0);
+  const capacity = BB.FLEET.length * BB.NB_RUNTIME_CAP * BB.NB_FLOW;
+  const runtime = BB.FLEET.reduce((a, b) => a + b.runtime, 0);
+  const dos = BB.FLEET.map(b => readings(b.id).do);
   return {
-    held, cap, pct: Math.round(held / cap * 100),
-    carts, cartCap, cartPct: Math.round(carts / cartCap * 100),
-    full: BB.FLEET.filter(b => b.cartridges >= BB.CART_BAY).length,
-    low:  BB.FLEET.filter(b => b.cartridges <= 1).length,
-    needService: BB.FLEET.filter(b => b.tank >= 75).length
+    treated, capacity, treatedPct: Math.round(treated / capacity * 100),
+    runtime, o2: runtime * BB.NB_O2_RATE,
+    active:  BB.FLEET.filter(b => b.nbState === 'active').length,
+    idle:    BB.FLEET.filter(b => b.nbState === 'idle').length,
+    offline: BB.FLEET.filter(b => b.nbState === 'offline').length,
+    meanDO: dos.reduce((a, x) => a + x, 0) / dos.length,
+    aboveFloor: dos.filter(d => d >= BB.DO_FLOOR).length,
+    servicing: BB.FLEET.filter(b => b.diffuser < 75).length
   };
 }
 
+const NB_STATE = {
+  active:  { label:'Releasing', badge:'b-green', color:'#3FA34D' },
+  idle:    { label:'Standby',   badge:'b-blue',  color:'#1B6CA8' },
+  offline: { label:'Offline',   badge:'b-grey',  color:'#7C93A6' }
+};
+
 function ScreenAnalytics(){
   const s = BB.SUMMARY[state.range];
-  const t = fleetTotals();
+  const t = fleetStats();
 
-  /* algicide load, emptiest first — that is the list you act on */
-  const byLoad = BB.FLEET.slice().sort((a, b) => a.cartridges - b.cartridges);
-  /* holding tank, fullest first — those need collecting */
-  const byTank = BB.FLEET.slice().sort((a, b) => b.tank - a.tank);
+  /* least aeration headroom first — that is the list you act on */
+  const byRuntime = BB.FLEET.slice().sort((a, b) => b.runtime - a.runtime);
+  /* lowest oxygen first — the basins closest to hypoxia */
+  const byDO = BB.FLEET.slice().sort((a, b) => readings(a.id).do - readings(b.id).do);
+  const recent = state.releases.slice(0, 3);
+
+  /* live indicator levels, shown as a share of the top of each healthy band */
+  const indicator = (b, key) => {
+    const spec = BB.SENSORS[key];
+    const v = readings(b.id)[key];
+    const ceil = spec.risk === 'low' ? spec.good[1] : (spec.good[1] || spec.span[1]);
+    return { v, spec, pct: Math.max(4, Math.min(100, Math.round(v / ceil * 100))) };
+  };
 
   const body = `
     <div class="segs">
@@ -435,87 +455,125 @@ function ScreenAnalytics(){
         </button>`).join('')}
     </div>
 
-    <!-- fleet holding tanks -->
+    <!-- water treated by aeration -->
     <div class="card card--pad">
-      <div class="card__title"><h3>Algae held across the fleet</h3><span>${BB.FLEET.length} buoys</span></div>
+      <div class="card__title"><h3>Water treated by aeration</h3><span>${BB.FLEET.length} buoys</span></div>
       <div class="bigstat__row">
-        <span class="bigstat__num">${Math.round(t.held)}</span>
-        <span class="bigstat__unit">KG OF ${t.cap} CAPACITY</span>
+        <span class="bigstat__num">${(t.treated / 1000).toFixed(1)}k</span>
+        <span class="bigstat__unit">M³ TODAY OF ${(t.capacity / 1000).toFixed(0)}K CAPACITY</span>
       </div>
-      <div class="prog ${t.pct > 75 ? 'prog--amber' : 'prog--leaf'}" style="margin-top:10px">
-        <div class="prog__fill" style="width:${t.pct}%"></div>
+      <div class="prog prog--leaf" style="margin-top:10px">
+        <div class="prog__fill" style="width:${t.treatedPct}%"></div>
       </div>
-      <div class="kv" style="margin-top:10px"><span>Fleet tanks</span><b>${t.pct}% full</b></div>
-      <div class="kv"><span>Skimmed this ${state.range.replace('ly','')}</span><b>${s.collected} kg</b></div>
-      <div class="kv"><span>Buoys due for collection</span>
-        <b style="color:${t.needService ? 'var(--coral)' : 'var(--leaf-dark)'}">${t.needService}</b></div>
+      <div class="kv" style="margin-top:10px"><span>Aeration run today</span><b>${t.runtime.toFixed(1)} h</b></div>
+      <div class="kv"><span>Oxygen dispersed</span><b>${t.o2.toFixed(1)} kg</b></div>
+      <div class="kv"><span>Treated this ${state.range.replace('ly','')}</span><b>${s.collected.toLocaleString()} m³</b></div>
     </div>
 
-    <!-- algicide readiness -->
+    <!-- oxygen recovery: the point of the intervention -->
     <div class="card card--pad">
-      <div class="card__title"><h3>Algicide readiness</h3><span>${t.carts}/${t.cartCap} cartridges</span></div>
+      <div class="card__title"><h3>Dissolved-oxygen recovery</h3><span>floor ${BB.DO_FLOOR.toFixed(1)} mg/L</span></div>
       <div class="bigstat__row">
-        <span class="bigstat__num" style="color:${t.full === BB.FLEET.length ? 'var(--leaf-dark)' : 'var(--ocean-800)'}">${t.full}</span>
-        <span class="bigstat__unit">OF ${BB.FLEET.length} BUOYS FULLY LOADED</span>
+        <span class="bigstat__num" style="color:${t.aboveFloor === BB.FLEET.length ? 'var(--leaf-dark)' : 'var(--coral)'}">${t.aboveFloor}</span>
+        <span class="bigstat__unit">OF ${BB.FLEET.length} BASINS ABOVE THE FLOOR</span>
       </div>
-      <div class="prog ${t.cartPct < 50 ? 'prog--danger' : t.cartPct < 80 ? 'prog--amber' : 'prog--leaf'}" style="margin-top:10px">
-        <div class="prog__fill" style="width:${t.cartPct}%"></div>
+      <div class="kv" style="margin-top:10px"><span>Fleet mean DO</span><b>${t.meanDO.toFixed(2)} mg/L</b></div>
+      <div class="note" style="margin:11px 0 0">
+        <b>Nothing is collected.</b> The bubbles collapse and lyse the cyanobacteria in place;
+        the biomass remineralises into the water column while the same bubbles put oxygen back.
+        There is no skimmer, no holding tank and no trip to shore.
       </div>
-      ${t.low ? `<div class="note" style="margin:11px 0 0">
-        <b>${t.low} buoy${t.low > 1 ? 's' : ''} at or below one cartridge.</b>
-        Schedule a resupply before the next warm spell — a buoy with an empty bay can still
-        predict a bloom but cannot act on it.</div>` : ''}
     </div>
 
-    <!-- per-buoy algicide tanks -->
-    <div class="sec-label">Algicide on board</div>
+    <!-- generator fleet state -->
+    <div class="card card--pad">
+      <div class="card__title"><h3>Nanobubble generators</h3><span>${t.runtime.toFixed(1)} h run today</span></div>
+      <div class="nbstate">
+        <div><b style="color:#3FA34D">${t.active}</b><small>Releasing</small></div>
+        <div><b style="color:#1B6CA8">${t.idle}</b><small>Standby</small></div>
+        <div><b style="color:${t.offline ? '#DE3B3B' : '#7C93A6'}">${t.offline}</b><small>Offline</small></div>
+      </div>
+      ${t.servicing ? `<div class="note" style="margin:11px 0 0">
+        <b>${t.servicing} diffuser${t.servicing > 1 ? 's' : ''} below 75% condition.</b>
+        Fouled diffusers make coarser bubbles, which rise and burst instead of staying
+        suspended — schedule a clean before the next warm spell.</div>` : ''}
+    </div>
+
+    <!-- release activity -->
+    <div class="sec-label sec-label--row">
+      <span>Recent releases</span><a data-goto="releases">Full log</a>
+    </div>
     <div class="rows">
-      ${byLoad.map(b => {
-        const pct = Math.round(b.cartridges / BB.CART_BAY * 100);
-        const tone = b.cartridges >= BB.CART_BAY ? 'b-green' : b.cartridges <= 1 ? 'b-red' : 'b-amber';
+      ${recent.map(r => {
+        const st = REL_STATE[r.state];
+        return `<button class="row" data-goto="releases">
+          <span class="row__ic" style="background:${st.color}">${ic(st.icon)}</span>
+          <span class="row__main">
+            <b>${esc(r.id)} · ${esc(r.buoy)}</b>
+            <small>${esc(r.start)} · ${r.mins} min<br>${r.treated.toLocaleString()} m³ · ${r.o2} kg O₂${r.chlDrop != null ? ` · −${r.chlDrop}% chl-a` : ''}</small>
+          </span>
+          <span class="row__end"><span class="badge ${st.badge}">${st.label}</span></span>
+        </button>`;
+      }).join('')}
+    </div>
+
+    <!-- aeration headroom per buoy -->
+    <div class="sec-label">Aeration run time</div>
+    <div class="rows">
+      ${byRuntime.map(b => {
+        const st = NB_STATE[b.nbState];
+        const pct = Math.round(b.runtime / BB.NB_RUNTIME_CAP * 100);
         return `<div class="statrow">
           <div class="statrow__top">
             <b>${esc(b.name)}</b>
-            <span class="badge ${tone}">${b.cartridges}/${BB.CART_BAY}</span>
+            <span class="badge ${st.badge}">${st.label}</span>
           </div>
-          <div class="capbar capbar--light">
-            ${Array.from({ length: BB.CART_BAY }, (_, i) => `<i class="${i < b.cartridges ? 'on' : ''}"></i>`).join('')}
+          <div class="prog ${b.nbState === 'offline' ? 'prog--danger' : 'prog--leaf'}">
+            <div class="prog__fill" style="width:${pct}%"></div>
           </div>
           <div class="statrow__foot">
-            <span>${esc(b.id)}</span>
-            <span>${(b.cartridges * BB.CART_LITRES).toFixed(1)} L of strain 6A1 · ${pct}%</span>
+            <span>${esc(b.id)} · diffuser ${b.diffuser}%</span>
+            <span>${b.runtime.toFixed(1)} of ${BB.NB_RUNTIME_CAP} h · ${b.treatedToday.toLocaleString()} m³</span>
           </div>
         </div>`;
       }).join('')}
     </div>
 
-    <!-- per-buoy holding tanks -->
-    <div class="sec-label">Holding tanks</div>
+    <!-- live indicator levels in each lake -->
+    <div class="sec-label">Indicator levels by lake</div>
+    <p class="sec-note">Live from the buoys, lowest oxygen first. Bars show each reading against
+      the top of its healthy band.</p>
     <div class="rows">
-      ${byTank.map(b => `
-        <div class="statrow">
+      ${byDO.map(b => {
+        const o2 = indicator(b, 'do'), chl = indicator(b, 'chl'), pc = indicator(b, 'pc');
+        const low = o2.v < BB.DO_FLOOR;
+        return `<div class="statrow">
           <div class="statrow__top">
             <b>${esc(b.name)}</b>
-            <span class="badge ${b.tank >= 75 ? 'b-red' : b.tank >= 40 ? 'b-amber' : 'b-green'}">${b.tank}%</span>
+            <span class="badge ${low ? 'b-red' : 'b-green'}">${low ? 'Below floor' : 'Oxygenated'}</span>
           </div>
-          <div class="prog ${b.tank >= 75 ? 'prog--amber' : 'prog--leaf'}">
-            <div class="prog__fill" style="width:${b.tank}%"></div>
+          <div class="indi">
+            ${[['Dissolved O₂', o2, 'mg/L'], ['Chlorophyll-a', chl, 'µg/L'], ['Phycocyanin', pc, 'µg/L']]
+              .map(([label, d, unit]) => `
+              <div class="indi__row">
+                <span>${label}</span>
+                <div class="prog"><div class="prog__fill"
+                     style="width:${d.pct}%;background:${d.spec.color}"></div></div>
+                <b>${d.v.toFixed(d.spec.dp)} <em>${unit}</em></b>
+              </div>`).join('')}
           </div>
-          <div class="statrow__foot">
-            <span>${esc(b.id)}</span>
-            <span>${Math.round(b.tank / 100 * b.tankCap)} of ${b.tankCap} kg</span>
-          </div>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
     </div>
 
     <!-- period activity -->
     <div class="sec-label">${state.range[0].toUpperCase() + state.range.slice(1)} activity</div>
     <div class="chartbox">${barChart(s.bars, s.max)}</div>
     <div class="card card--pad">
-      <div class="card__title"><h3>Resource recovery</h3><span>shore digester</span></div>
-      <div class="kv"><span>Biogas produced</span><b>${s.bars[2].v} m³</b></div>
-      <div class="kv"><span>Methane fraction</span><b>≈ 65%</b></div>
-      <div class="kv"><span>Energy returned</span><b>${(s.bars[2].v * 6.1).toFixed(0)} kWh<sub>e</sub></b></div>
+      <div class="card__title"><h3>In-situ breakdown</h3><span>no collection</span></div>
+      <div class="kv"><span>Oxygen dispersed</span><b>${s.bars[2].v.toLocaleString()} kg</b></div>
+      <div class="kv"><span>Releases fired</span><b>${s.bars[1].v}</b></div>
+      <div class="kv"><span>Biomass removed to shore</span><b>0 kg</b></div>
       ${s.kpis.map(([k, v]) => `<div class="kv"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}
     </div>
 
@@ -524,12 +582,12 @@ function ScreenAnalytics(){
     <p class="sec-note">Open any buoy for its live sensor channels, bloom-risk breakdown and telemetry.</p>
     <div class="rows">
       ${BB.FLEET.map(b => {
-        const risk = riskOf(b.id), band = BB.riskBand(risk);
+        const risk = riskOf(b.id), band = BB.riskBand(risk), st = NB_STATE[b.nbState];
         return `<button class="row" data-buoy="${b.id}">
           <span class="row__ic" style="background:${band.color}">${ic('ic-wave')}</span>
           <span class="row__main">
             <b>${esc(b.name)}</b>
-            <small>${esc(b.id)} · ${esc(b.org)}<br>${b.cartridges}/${BB.CART_BAY} cartridges · tank ${b.tank}% · batt ${b.battery}%</small>
+            <small>${esc(b.id)} · ${esc(b.org)}<br>${st.label} · ${b.runtime.toFixed(1)} h aeration · batt ${b.battery}%</small>
           </span>
           <span class="row__end">
             <span class="big" style="color:${band.color}">${risk}</span>
@@ -932,7 +990,7 @@ function ScreenAlerts(){
           <button class="switch ${state.thresholds.pushEnabled ? 'is-on' : ''}" data-toggle="pushEnabled" aria-label="Push notifications"></button>
         </div>
         <div class="tgl">
-          <span class="tgl__txt"><b>Auto-deploy cartridge</b><small>Release without waiting for approval above threshold</small></span>
+          <span class="tgl__txt"><b>Auto-release nanobubbles</b><small>Start aeration without waiting for approval above threshold</small></span>
           <button class="switch ${state.thresholds.autoDeploy ? 'is-on' : ''}" data-toggle="autoDeploy" aria-label="Auto deploy"></button>
         </div>
         <div class="tgl">
@@ -953,129 +1011,134 @@ function ScreenAlerts(){
 /* ============================================================
    SCREEN — CARTRIDGE LOG
    ============================================================ */
-const CART_STATE = {
-  loaded:   { badge:'b-blue',  label:'Loaded',    color:'#1B6CA8', icon:'ic-cartridge' },
-  deployed: { badge:'b-amber', label:'Deployed',  color:'#F0A32E', icon:'ic-bolt' },
-  spent:    { badge:'b-grey',  label:'Awaiting retrieval', color:'#7C93A6', icon:'ic-warn' },
-  retrieved:{ badge:'b-green', label:'Retrieved', color:'#3FA34D', icon:'ic-check' }
+const REL_STATE = {
+  scheduled:{ badge:'b-blue',  label:'Scheduled', color:'#1B6CA8', icon:'ic-refresh' },
+  active:   { badge:'b-green', label:'Releasing', color:'#3FA34D', icon:'ic-bolt' },
+  complete: { badge:'b-grey',  label:'Complete',  color:'#7C93A6', icon:'ic-check' }
 };
 
-function ScreenCartridges(){
+function ScreenReleases(){
   const b = buoy();
-  const total = state.cartridges.length;
-  const active = state.cartridges.filter(c => c.state === 'deployed').length;
-  const pending = state.cartridges.filter(c => c.state === 'spent').length;
-  const kills = state.cartridges.filter(c => c.kill != null).map(c => c.kill);
-  const avgKill = kills.length ? Math.round(kills.reduce((a, x) => a + x, 0) / kills.length) : 0;
-  const onboard = b.cartridges;
+  const st = NB_STATE[b.nbState];
+  const done = state.releases.filter(r => r.state === 'complete');
+  const lifts = done.filter(r => r.doLift != null).map(r => r.doLift);
+  const drops = done.filter(r => r.chlDrop != null).map(r => r.chlDrop);
+  const avgLift = lifts.length ? (lifts.reduce((a, x) => a + x, 0) / lifts.length).toFixed(1) : '—';
+  const avgDrop = drops.length ? Math.round(drops.reduce((a, x) => a + x, 0) / drops.length) : 0;
+  const pct = Math.round(b.runtime / BB.NB_RUNTIME_CAP * 100);
 
   const body = `
     <div class="cart-hero">
-      <h3>Cartridge bay — ${esc(b.id)}</h3>
-      <div class="sub">${esc(b.name)} · algicidal strain 6A1</div>
-      <div class="capbar">${Array.from({ length: 6 }, (_, i) => `<i class="${i < onboard ? 'on' : ''}"></i>`).join('')}</div>
+      <h3>Nanobubble generator — ${esc(b.id)}</h3>
+      <div class="sub">${esc(b.name)} · ${st.label.toLowerCase()}</div>
+      <div class="capbar">${Array.from({ length: 6 }, (_, i) =>
+        `<i class="${i < Math.round(b.runtime / BB.NB_RUNTIME_CAP * 6) ? 'on' : ''}"></i>`).join('')}</div>
       <div class="cart-hero__grid">
-        <div class="cart-hero__cell"><b>${onboard}/6</b><small>On board</small></div>
-        <div class="cart-hero__cell"><b>${avgKill}%</b><small>Avg knockdown</small></div>
-        <div class="cart-hero__cell"><b>${pending}</b><small>To retrieve</small></div>
+        <div class="cart-hero__cell"><b>${pct}%</b><small>Run time used</small></div>
+        <div class="cart-hero__cell"><b>+${avgLift}</b><small>Avg DO lift</small></div>
+        <div class="cart-hero__cell"><b>${avgDrop}%</b><small>Avg chl-a drop</small></div>
       </div>
     </div>
 
     <div class="note">
-      <b>Why a cartridge, not a dose.</b> Algicidal compounds are secreted into the water — the bacteria
-      never have to contact the algae directly. Keeping the culture inside a retrievable housing means
-      nothing is released loose into the reservoir, and the housing comes back for assay.
+      <b>Why bubbles, not chemicals.</b> Nanobubbles are small enough to stay suspended instead of
+      rising and bursting. When they collapse they shear the cyanobacteria apart and leave dissolved
+      oxygen behind — so the same action that ends the bloom also treats the hypoxia it caused.
+      Nothing is added to the water and nothing is taken out of it.
     </div>
 
-    ${pending ? `
-    <div class="card card--pad">
-      <div class="card__title"><h3>Ready for retrieval</h3><span>${pending} housing${pending === 1 ? '' : 's'}</span></div>
-      <p style="margin:0 0 11px;font-size:11.5px;line-height:1.55;color:var(--ink-2)">
-        A cartridge becomes recoverable once its lysis window closes and the payload is spent.
-        Log it as retrieved when the housing is back on the service boat.
-      </p>
-      <button class="actionbtn actionbtn--solid" data-action="retrieve-all" style="width:100%">
-        ${ic('ic-check')} Mark all ${pending} retrieved
-      </button>
-    </div>` : ''}
-
-    <div class="sec-label sec-label--row"><span>Deployment history</span><span style="font-weight:650">${total} logged</span></div>
+    <div class="sec-label sec-label--row"><span>Release history</span><span style="font-weight:650">${state.releases.length} logged</span></div>
 
     <div class="timeline">
-      ${state.cartridges.map(c => {
-        const st = CART_STATE[c.state];
+      ${state.releases.map(r => {
+        const rs = REL_STATE[r.state];
         return `<div class="tl-item">
-          <span class="tl-dot" style="background:${st.color}">${ic(st.icon)}</span>
+          <span class="tl-dot" style="background:${rs.color}">${ic(rs.icon)}</span>
           <div class="tl-body">
             <div class="t">
-              <b>${esc(c.id)} · ${esc(c.buoy)}</b>
-              <time>${esc(c.deployed || c.loaded)}</time>
+              <b>${esc(r.id)} · ${esc(r.buoy)}</b>
+              <time>${esc(r.start)}</time>
             </div>
-            <div style="margin-top:5px"><span class="badge ${st.badge}">${st.label}</span></div>
-            <p>${esc(c.note)}</p>
+            <div style="margin-top:5px"><span class="badge ${rs.badge}">${rs.label}</span></div>
+            <p>${esc(r.note)}</p>
             <div class="tl-kv">
-              <span>Dose <b>${c.dose} L</b></span>
-              <span>Capacity <b>${c.capacity}%</b></span>
-              ${c.kill != null ? `<span>Knockdown <b>${c.kill}%</b></span>` : ''}
-              <span>Trigger <b>${esc(c.trigger)}</b></span>
-              ${c.retrieved ? `<span>Retrieved <b>${esc(c.retrieved)}</b></span>` : ''}
+              <span>Duration <b>${r.mins} min</b></span>
+              <span>Water treated <b>${r.treated.toLocaleString()} m³</b></span>
+              <span>O₂ dispersed <b>${r.o2} kg</b></span>
+              ${r.doLift != null ? `<span>DO lift <b>+${r.doLift} mg/L</b></span>` : ''}
+              ${r.chlDrop != null ? `<span>Chl-a <b>−${r.chlDrop}%</b></span>` : ''}
+              <span>Trigger <b>${esc(r.trigger)}</b></span>
             </div>
-            ${c.state === 'spent' ? `<div class="alert__acts"><button class="minibtn minibtn--solid" data-action="retrieve" data-cart="${c.id}">Mark retrieved</button></div>` : ''}
+            ${r.state === 'active' ? `<div class="alert__acts"><button class="minibtn minibtn--solid" data-action="stop-release" data-rel="${r.id}">Stop release</button></div>` : ''}
           </div>
         </div>`;
       }).join('')}
     </div>
 
     <div class="btnrow">
-      <button class="actionbtn actionbtn--danger" data-action="deploy" ${onboard > 0 ? '' : 'disabled'}>
-        ${ic('ic-cartridge')} Deploy now
+      <button class="actionbtn actionbtn--danger" data-action="release" ${b.nbState === 'offline' ? 'disabled' : ''}>
+        ${ic('ic-bolt')} Start release
       </button>
-      <button class="actionbtn" data-goto="harvest">${ic('ic-leaf')} Harvest</button>
+      <button class="actionbtn" data-goto="oxygen">${ic('ic-drop')} Oxygen chain</button>
     </div>`;
 
-  return shell(barPlain('Cartridge Log', 'home'), body, 'profile');
+  return shell(barPlain('Release Log', 'home'), body, 'profile');
 }
 
 /* ============================================================
-   SCREEN — HARVEST / BIOGAS
+   SCREEN — OXYGEN CHAIN
    ============================================================ */
-function ScreenHarvest(){
+function ScreenOxygen(){
   const b = buoy();
+  const t = fleetStats();
+  const pct = Math.round(b.runtime / BB.NB_RUNTIME_CAP * 100);
+
   const body = `
     <div class="page-head">
-      <h2>Harvest<span class="thin">&amp; Biogas</span></h2>
-      <p>Skimmer → onboard holding tank → shore anaerobic digester → methane back to the station.</p>
+      <h2>Oxygen<span class="thin">&amp; Breakdown</span></h2>
+      <p>Solar charge → nanobubble generator → bubble collapse → lysis and reoxygenation, all in the water column.</p>
     </div>
 
     <div class="card card--pad">
-      <div class="card__title"><h3>Onboard holding tank</h3><span>${b.tank}% full</span></div>
-      <div class="prog ${b.tank > 75 ? 'prog--amber' : 'prog--leaf'}"><div class="prog__fill" style="width:${b.tank}%"></div></div>
-      <div class="kv" style="margin-top:10px"><span>Skimmer throughput</span><b>4.8 kg/day</b></div>
-      <div class="kv"><span>Mesh strain stage</span><b>Nominal</b></div>
-      <div class="kv"><span>Return-to-shore trigger</span><b>90% full</b></div>
+      <div class="card__title"><h3>Aeration budget — ${esc(b.id)}</h3><span>${pct}% used</span></div>
+      <div class="prog ${pct > 75 ? 'prog--amber' : 'prog--leaf'}"><div class="prog__fill" style="width:${pct}%"></div></div>
+      <div class="kv" style="margin-top:10px"><span>Run time today</span><b>${b.runtime.toFixed(1)} of ${BB.NB_RUNTIME_CAP} h</b></div>
+      <div class="kv"><span>Water treated</span><b>${b.treatedToday.toLocaleString()} m³</b></div>
+      <div class="kv"><span>Diffuser condition</span><b>${b.diffuser}%</b></div>
+      <div class="kv"><span>Solar yield today</span><b>${b.solar} Wh</b></div>
     </div>
 
-    <div class="sec-label">Conversion chain</div>
+    <div class="sec-label">How a release works</div>
     <div class="rows">
       ${[
-        ['Skimmer sweep','Conveyor lifts surface mat into the funnel','ic-wave','#1B6CA8','40.5 kg'],
-        ['Water strain','Mesh drains free water before storage','ic-drop','#3FB6D3','−62% mass'],
-        ['Anaerobic digestion','Shore digester, ~65% methane fraction','ic-flask','#3FA34D','16.8 m³'],
-        ['Energy return','Methane offsets station and buoy charging','ic-bolt','#F0A32E','102 kWh']
-      ].map(([t, s, i, c, v]) => `
+        ['Solar charge','Panel tops up the pack; aeration only runs on surplus','ic-sun','#F0A32E', b.solar + ' Wh'],
+        ['Bubble generation','Compressor and ceramic diffuser produce sub-micron bubbles','ic-bolt','#7A5AD1', BB.NB_FLOW + ' m³/h'],
+        ['Suspension','Too small to rise, they stay in the column and spread','ic-wave','#1B6CA8','hours'],
+        ['Collapse and lysis','Implosion shears the cyanobacteria; cells rupture','ic-flask','#E8562A','−' + 71 + '% chl-a'],
+        ['Reoxygenation','The same bubbles leave dissolved oxygen behind','ic-drop','#3FA34D','+' + BB.NB_O2_RATE + ' kg/h'],
+        ['Remineralisation','Biomass breaks down to nutrients in place — nothing removed','ic-leaf','#2C7A3F','0 kg hauled']
+      ].map(([t2, s2, i, c, v]) => `
         <div class="row">
           <span class="row__ic" style="background:${c}">${ic(i)}</span>
-          <span class="row__main"><b>${t}</b><small>${s}</small></span>
-          <span class="row__end"><span class="big">${v}</span></span>
+          <span class="row__main"><b>${t2}</b><small>${s2}</small></span>
+          <span class="row__end"><span class="big" style="font-size:12.5px">${v}</span></span>
         </div>`).join('')}
     </div>
 
+    <div class="card card--pad">
+      <div class="card__title"><h3>Fleet oxygen today</h3><span>${BB.FLEET.length} buoys</span></div>
+      <div class="kv"><span>Oxygen dispersed</span><b>${t.o2.toFixed(1)} kg</b></div>
+      <div class="kv"><span>Mean dissolved O₂</span><b>${t.meanDO.toFixed(2)} mg/L</b></div>
+      <div class="kv"><span>Basins above floor</span><b>${t.aboveFloor} / ${BB.FLEET.length}</b></div>
+      <div class="kv"><span>Biomass transported</span><b>0 kg</b></div>
+    </div>
+
     <div class="note">
-      Removal only runs when concentration exceeds the healthy ecological threshold, so the buoy
-      never strips a basin that is functioning normally.
+      Aeration only runs when the model says a basin needs it, so a healthy lake is left alone
+      and the solar budget goes to the basins that are actually at risk.
     </div>`;
 
-  return shell(barPlain('Harvest & Biogas', 'home'), body, 'home');
+  return shell(barPlain('Oxygen & Breakdown', 'home'), body, 'home');
 }
 
 /* ============================================================
@@ -1095,16 +1158,16 @@ function ScreenProfile(){
 
     <div class="prof__stats">
       <div class="prof__stat"><b>${BB.FLEET.length}</b><small>Buoys</small></div>
-      <div class="prof__stat"><b>${state.cartridges.filter(c => c.state !== 'loaded').length}</b><small>Deployments</small></div>
-      <div class="prof__stat"><b>1,240</b><small>kg recovered</small></div>
+      <div class="prof__stat"><b>${state.releases.filter(r => r.state !== 'scheduled').length}</b><small>Releases</small></div>
+      <div class="prof__stat"><b>18.4k</b><small>m³ treated</small></div>
     </div>
 
     <div class="sec-label">Shortcuts</div>
     <div class="rows">
       ${[
-        ['Cartridge Log','Deployment history and retrieval','ic-cartridge','#3FA34D','cartridges'],
+        ['Release Log','Nanobubble release history','ic-bolt','#7A5AD1','releases'],
         ['Live Sensors','Real-time channels and risk score','ic-wave','#1B6CA8','sensors'],
-        ['Harvest & Biogas','Recovery chain and energy return','ic-leaf','#2C7A3F','harvest'],
+        ['Oxygen & Breakdown','Aeration chain and oxygen recovery','ic-drop','#3FA34D','oxygen'],
         ['Alert rules','Thresholds and push settings','ic-bell','#F0A32E','alerts']
       ].map(([t, s, i, c, go]) => `
         <button class="row" data-goto="${go}">
@@ -1134,8 +1197,8 @@ function ScreenProfile(){
    ============================================================ */
 const SCREENS = {
   home:ScreenHome, sensors:ScreenSensors, analytics:ScreenAnalytics,
-  alerts:ScreenAlerts, cartridges:ScreenCartridges,
-  harvest:ScreenHarvest, profile:ScreenProfile
+  alerts:ScreenAlerts, releases:ScreenReleases,
+  oxygen:ScreenOxygen, profile:ScreenProfile
 };
 const TAB_ORDER = ['home','analytics','profile'];
 
@@ -1244,7 +1307,7 @@ function tick(){
     if (cd.do > 0) cd.do--;
     checkThresholds(b);
   });
-  advanceCartridges();
+  advanceReleases();
   updateLive();
 }
 
@@ -1280,32 +1343,32 @@ function checkThresholds(b){
 
 function raiseBloomAlert(b, risk){
   const r = readings(b.id);
-  const empty = b.cartridges <= 0;
-  const auto  = state.thresholds.autoDeploy && !empty;
+  const down = b.nbState === 'offline';
+  const auto = state.thresholds.autoDeploy && !down;
 
-  /* Three distinct outcomes — an empty bay is not the same thing as
-     auto-deploy being switched off, and telling an operator to "approve"
+  /* Three distinct outcomes — a downed generator is not the same thing as
+     auto-release being switched off, and telling an operator to "approve"
      a release the buoy cannot physically make is worse than useless. */
   let outcome, short;
-  if (empty){
-    outcome = 'The cartridge bay is empty, so nothing can be released. This basin needs a resupply run before the buoy can intervene.';
-    short   = 'Cartridge bay empty — resupply needed. ';
+  if (down){
+    outcome = 'The nanobubble generator is offline, so this basin cannot be treated until it is serviced.';
+    short   = 'Generator offline — service needed. ';
   } else if (auto){
-    outcome = 'Auto-deploy is on — a cartridge has been released.';
-    short   = 'Cartridge released automatically. ';
+    outcome = 'Auto-release is on — aeration has started.';
+    short   = 'Nanobubble release started. ';
   } else {
-    outcome = 'Auto-deploy is off, so this is waiting on your approval.';
+    outcome = 'Auto-release is off, so this is waiting on your approval.';
     short   = 'Approval needed. ';
   }
 
   addAlert({
-    sev: empty || risk >= 80 ? 'crit' : 'high', icon:'ic-warn', color: empty || risk >= 80 ? '#DE3B3B' : '#E8562A',
+    sev: down || risk >= 80 ? 'crit' : 'high', icon:'ic-warn', color: down || risk >= 80 ? '#DE3B3B' : '#E8562A',
     title:`Bloom risk ${risk} — ${b.name}`,
     body:`Crossed your threshold of ${state.thresholds.risk}. Phycocyanin ${r.pc.toFixed(1)} µg/L, AVOC index ${r.voc.toFixed(1)} ppb, DO ${r.do.toFixed(2)} mg/L. ${outcome}`,
-    buoy:b.id, acts:[['View sensors','sensors'],['Cartridge log','cartridges']]
+    buoy:b.id, acts:[['View sensors','sensors'],['Release log','releases']]
   });
   pushNotify('Bloom risk ' + risk + ' — ' + b.name, short + 'Tap to open the live dashboard.', 'sensors');
-  if (auto) doDeploy(b, true);
+  if (auto) doRelease(b, true);
 }
 
 function refreshBadge(){
@@ -1359,93 +1422,101 @@ function pushNotify(title, body, goto){
 /* ============================================================
    ACTIONS
    ============================================================ */
-function doDeploy(b, automatic){
+function doRelease(b, automatic){
   b = b || buoy();
-  if (b.cartridges <= 0) return;
-  b.cartridges--;
-  const id = 'CT-' + (2300 + Math.floor(Math.random() * 90));
+  if (b.nbState === 'offline') return;
+  const id = 'NB-' + (2300 + Math.floor(Math.random() * 90));
   const risk = riskOf(b.id);
-  const chlNow = state.hist[b.id].chl[state.hist[b.id].chl.length - 1];
-  state.cartridges.unshift({
-    id, buoy:b.id, strain:'6A1', state:'deployed',
-    loaded:'2026-08-04', deployed:stamp(), retrieved:null,
-    dose:0.5, capacity:100,
-    /* lysis window: ticks until the payload is spent and the housing
-       can be recovered. chlAtDeploy is the baseline we measure against. */
-    window:20, chlAtDeploy:chlNow,
+  const h = state.hist[b.id];
+  b.nbState = 'active';
+  state.releases.unshift({
+    id, buoy:b.id, state:'active',
+    start:stamp(), mins:0, o2:0, treated:0, doLift:null, chlDrop:null,
+    /* aeration window: ticks of bubble generation. chlAtStart / doAtStart
+       are the baselines the finished release is measured against. */
+    window:20, chlAtStart:h.chl[h.chl.length - 1], doAtStart:h.do[h.do.length - 1],
     trigger:`Risk ${risk} → ${automatic ? 'auto-release' : 'operator approved'}`,
-    kill:null,
-    note:'Released over the highest-density patch. Lysis window opens in ~2 h; expect chlorophyll knockdown within 30 h.'
+    note:'Diffuser ring running over the highest-density patch. Bubbles stay suspended; expect lysis and an oxygen lift within 30 h.'
   });
   /* the intervention pulls the basin back down */
   state.boost[b.id] = -0.85;
   if (!automatic){
-    pushNotify('Cartridge ' + id + ' released', b.name + ' — algicidal strain 6A1, 0.5 L dose. Knockdown expected within 30 h.', 'cartridges');
+    pushNotify('Release ' + id + ' started', b.name + ' — nanobubble aeration under way. Lysis and oxygen lift expected within 30 h.', 'releases');
     addAlert({
-      sev:'info', icon:'ic-cartridge', color:'#1B6CA8',
-      title:`Cartridge ${id} deployed — ${b.name}`,
-      body:`Operator-approved release at risk ${risk}. Housing stays tethered for retrieval and post-deployment assay.`,
-      buoy:b.id, acts:[['Cartridge log','cartridges']]
+      sev:'info', icon:'ic-bolt', color:'#1B6CA8',
+      title:`Release ${id} started — ${b.name}`,
+      body:`Operator-approved aeration at risk ${risk}. Nothing is added to the water and nothing will be taken out of it.`,
+      buoy:b.id, acts:[['Release log','releases']]
     });
   }
-  /* An emptied bay leaves the basin with no intervention available —
-     surface it, whether the release was automatic or operator-approved. */
-  if (b.cartridges === 0){
+  /* Aeration is bounded by the solar budget, not a consumable — surface it
+     when a basin has effectively spent its day's run time. */
+  if (b.runtime >= BB.NB_RUNTIME_CAP * 0.9){
     addAlert({
-      sev:'warn', icon:'ic-cartridge', color:'#F0A32E',
-      title:`Cartridge bay empty — ${b.name}`,
-      body:`${b.id} released its last cartridge (${id}). Until a resupply run, this basin can sense and predict but cannot intervene.`,
-      buoy:b.id, acts:[['Cartridge log','cartridges'],['Map','home']]
+      sev:'warn', icon:'ic-sun', color:'#F0A32E',
+      title:`Aeration budget nearly spent — ${b.name}`,
+      body:`${b.id} has run ${b.runtime.toFixed(1)} of ${BB.NB_RUNTIME_CAP} h today. Further releases will draw the pack down overnight unless the forecast improves.`,
+      buoy:b.id, acts:[['Oxygen chain','oxygen'],['Map','home']]
     });
   }
 
-  if (state.screen === 'cartridges' || state.screen === 'sensors') render();
+  if (state.screen === 'releases' || state.screen === 'sensors') render();
+}
+
+function stopRelease(r){
+  if (!r || r.state !== 'active') return;
+  r.state   = 'complete';
+  r.chlDrop = measureKnockdown(r);
+  r.doLift  = measureDOLift(r);
+  r.note    = 'Stopped early by the operator. Partial lysis; the basin keeps whatever oxygen was delivered.';
+  const b = buoy(r.buoy);
+  if (b && b.nbState === 'active') b.nbState = 'idle';
 }
 
 /* Knockdown actually achieved, measured against the chlorophyll-a reading
-   taken when the cartridge went out. Falls back for the seeded entries
-   that were already in the water when the app started. */
+   taken when aeration started. Falls back for the seeded entries that were
+   already running when the app started. */
 function measureKnockdown(c){
   const hist = state.hist[c.buoy];
-  if (!hist || !c.chlAtDeploy) return 70;
+  if (!hist || !c.chlAtStart) return 70;
   const now = hist.chl[hist.chl.length - 1];
-  const pct = Math.round((1 - now / c.chlAtDeploy) * 100);
+  const pct = Math.round((1 - now / c.chlAtStart) * 100);
   return Math.max(38, Math.min(92, pct));
 }
 
-/* Run the lysis window down on anything in the water. When it expires the
-   payload is spent and the housing becomes recoverable — which is what
-   puts the Retrieve action on screen. */
-function advanceCartridges(){
+/* Run the aeration window down on any live release, accumulating water
+   treated and oxygen dispersed, then close it out with measured results. */
+function advanceReleases(){
   let changed = false;
-  state.cartridges.forEach(c => {
-    if (c.state !== 'deployed') return;
-    if (c.window == null) c.window = 20;
-    c.window--;
-    if (c.window > 0) return;
+  state.releases.forEach(r => {
+    if (r.state !== 'active') return;
+    if (r.window == null) r.window = 20;
+    r.window--;
+    r.mins    += state.fast ? 1 : 2;
+    r.treated += Math.round(BB.NB_FLOW / 30);
+    r.o2       = +(r.o2 + BB.NB_O2_RATE / 30).toFixed(2);
+    if (r.window > 0) return;
 
-    c.state    = 'spent';
-    c.capacity = 0;
-    c.kill     = measureKnockdown(c);
-    changed    = true;
+    r.state   = 'complete';
+    r.chlDrop = measureKnockdown(r);
+    r.doLift  = measureDOLift(r);
+    changed   = true;
     addAlert({
       sev:'ok', icon:'ic-check', color:'#3FA34D',
-      title:`Knockdown confirmed — ${c.buoy}`,
-      body:`${c.id} finished its lysis window with chlorophyll-a down ${c.kill}%. The housing is spent and ready for retrieval on the next service run.`,
-      buoy:c.buoy, acts:[['Retrieve it','cartridges']]
+      title:`Release complete — ${r.buoy}`,
+      body:`${r.id} finished aerating. Chlorophyll-a down ${r.chlDrop}% and dissolved oxygen up ${r.doLift} mg/L. Nothing to recover — the biomass remineralises in place.`,
+      buoy:r.buoy, acts:[['Release log','releases']]
     });
   });
-  if (changed && state.screen === 'cartridges') render();
+  if (changed && state.screen === 'releases') render();
 }
 
-/* Retrieval recovers an *empty* housing — it does NOT rearm the buoy. The
-   housing still has to go ashore and be re-cultured before it counts as a
-   live cartridge again, so the on-board count is deliberately untouched. */
-function retrieveCartridge(c){
-  if (c.state !== 'spent') return;
-  c.state     = 'retrieved';
-  c.retrieved = stamp();
-  c.note      = 'Empty housing recovered on the service run. Post-deployment assay logged; seals cleared for re-culturing on shore.';
+/* Oxygen actually gained since the release started. */
+function measureDOLift(r){
+  const hist = state.hist[r.buoy];
+  if (!hist || r.doAtStart == null) return 0;
+  const now = hist.do[hist.do.length - 1];
+  return Math.max(0, +(now - r.doAtStart).toFixed(1));
 }
 
 function stamp(){
@@ -1467,8 +1538,8 @@ function openSheet(id){
   const b = buoy(id);
   if (!b) return;
   const r = readings(id), risk = riskOf(id), band = BB.riskBand(risk);
-  const loaded = state.cartridges.filter(c => c.buoy === id && c.state === 'loaded').length;
-  const pending = state.cartridges.filter(c => c.buoy === id && c.state === 'spent').length;
+  const st = NB_STATE[b.nbState];
+  const live = state.releases.filter(r => r.buoy === id && r.state === 'active').length;
 
   $('#sheetPanel').innerHTML = `
     <div class="sheet__grab"></div>
@@ -1493,15 +1564,15 @@ function openSheet(id){
       <div><b>${BB.fmt('do', r.do)}</b><small>DO mg/L</small></div>
       <div><b>${BB.fmt('voc', r.voc)}</b><small>AVOC ppb</small></div>
       <div><b>${b.battery}%</b><small>Battery</small></div>
-      <div><b>${b.cartridges}</b><small>Cartridges</small></div>
-      <div><b>${b.tank}%</b><small>Tank</small></div>
+      <div><b>${b.runtime.toFixed(1)}h</b><small>Aeration</small></div>
+      <div><b>${b.diffuser}%</b><small>Diffuser</small></div>
     </div>
 
     <div class="sheet__meta">
       <span>Operator <b>${esc(b.org)}</b></span>
       <span>Deployed <b>${esc(b.deployed)}</b></span>
-      ${pending ? `<span>Awaiting retrieval <b>${pending}</b></span>` : ''}
-      ${loaded ? `<span>Ready to load <b>${loaded}</b></span>` : ''}
+      <span>Generator <b>${st.label}</b></span>
+      ${live ? `<span>Release in progress <b>${live}</b></span>` : ''}
     </div>
 
     <div class="sheet__acts">
@@ -1647,7 +1718,7 @@ document.addEventListener('click', e => {
     case 'zoom-in':      zoomBy(1.6); break;
     case 'zoom-out':     zoomBy(1 / 1.6); break;
     case 'zoom-next':    jumpToBuoy(); break;
-    case 'deploy':       doDeploy(buoy(), false); break;
+    case 'release':      doRelease(buoy(), false); break;
     case 'simulate':
       state.boost[state.buoyId] = 1.5;
       state.cooldown[state.buoyId] = { risk:0, do:0 };
@@ -1667,20 +1738,9 @@ document.addEventListener('click', e => {
       state.alerts.forEach(a => { a.unread = false; });
       render();
       break;
-    case 'retrieve':{
-      const id = actEl.getAttribute('data-cart');
-      const c = state.cartridges.find(x => x.id === id);
-      if (c) retrieveCartridge(c);
-      render();
-      break;
-    }
-    case 'retrieve-all':{
-      const spent = state.cartridges.filter(x => x.state === 'spent');
-      spent.forEach(retrieveCartridge);
-      if (spent.length){
-        pushNotify(`${spent.length} housing${spent.length === 1 ? '' : 's'} retrieved`,
-          'Logged against their deployments. Seals cleared for reuse after assay.', 'cartridges');
-      }
+    case 'stop-release':{
+      const id = actEl.getAttribute('data-rel');
+      stopRelease(state.releases.find(x => x.id === id));
       render();
       break;
     }
