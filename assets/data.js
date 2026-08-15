@@ -134,56 +134,72 @@ BB.RELEASES = [
 ];
 
 /* ---------------------------------------------------------------
-   4. WEEKLY ANALYTICS (per range key)
+   4. PERIOD ANALYTICS
+   Each range stores aeration HOURS per bucket and nothing else that
+   can drift: water treated is hours x NB_FLOW and oxygen dispersed is
+   hours x NB_O2_RATE, both derived at render time. The buckets sum to
+   the period total, and the periods nest:
+
+     today  24.1 h   (a busy day; fleet ceiling is 72 h/day)
+     week  147.7 h   ~21 h/day
+     month 629.5 h   ~4.3 weeks at ~146 h/week
+     year 2750.0 h   seasonal — August alone is 629 h
+
+   Aeration is concentrated in warm months because that is when
+   cyanobacteria bloom; the yearly curve is meant to show that, not a
+   flat run rate.
    --------------------------------------------------------------- */
 BB.SUMMARY = {
   daily:{
-    title:['Daily','Summary'],
-    bars:[{ l:'Water treated m³', v:3110, c:'#3FB6D3' },{ l:'Releases', v:1, c:'#7A5AD1' },{ l:'O₂ kg', v:5.5, c:'#1B6CA8' }],
-    max:4200,
-    collected:3110, target:4200, cUnit:'M³', cLabel:'Water treated',
+    label:'today',
+    xl:['00','04','08','12','16','20'],
+    /* pre-dawn peak: the oxygen minimum is when aeration buys the most */
+    hrs:[4.2, 7.8, 5.4, 2.9, 2.4, 1.4],
+    max:3600,
+    releases:3,
     series:[
-      { name:'Water temp', unit:'°C', color:'#F0A32E', pts:[22.9,23.1,23.4,24.0,24.4,24.6,24.6] },
-      { name:'Chlorophyll-a', unit:'µg/L', color:'#3FA34D', pts:[24,25,27,28,30,31,31] }
+      { name:'Dissolved O₂', unit:'mg/L', color:'#1B6CA8', pts:[5.8,5.4,6.9,7.9,8.3,7.6] },
+      { name:'Chlorophyll-a', unit:'µg/L', color:'#3FA34D', pts:[33,34,31,28,26,25] }
     ],
-    xl:['00','04','08','12','16','20','24'],
-    kpis:[['Aeration','7.4 h'],['Samples','1,416'],['Peak risk','74']]
+    kpis:[['Peak risk','74'],['Samples','1,416'],['Uptime','99.6%']]
   },
   weekly:{
-    title:['Weekly','Summary'],
-    bars:[{ l:'Water treated m³', v:18400, c:'#3FB6D3' },{ l:'Releases', v:6, c:'#7A5AD1' },{ l:'O₂ kg', v:33.2, c:'#1B6CA8' }],
-    max:24000,
-    collected:18400, target:24000, cUnit:'M³', cLabel:'Water treated',
-    series:[
-      { name:'Water temp', unit:'°C', color:'#F0A32E', pts:[21.4,21.9,22.6,23.0,23.8,24.2,24.6] },
-      { name:'Bloom risk', unit:'score', color:'#1B6CA8', pts:[38,42,47,53,61,68,74] }
-    ],
+    label:'this week',
     xl:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
-    kpis:[['Aeration','44 h'],['Samples','9,912'],['Peak risk','74']]
+    hrs:[16.2, 18.4, 21.0, 19.6, 23.1, 25.3, 24.1],
+    max:12000,
+    releases:14,
+    series:[
+      { name:'Dissolved O₂', unit:'mg/L', color:'#1B6CA8', pts:[6.1,6.4,6.8,7.0,7.3,7.5,7.7] },
+      { name:'Chlorophyll-a', unit:'µg/L', color:'#3FA34D', pts:[38,36,33,30,28,26,24] }
+    ],
+    kpis:[['Peak risk','81'],['Samples','9,912'],['Uptime','99.2%']]
   },
   monthly:{
-    title:['Monthly','Summary'],
-    bars:[{ l:'Water treated m³', v:76200, c:'#3FB6D3' },{ l:'Releases', v:22, c:'#7A5AD1' },{ l:'O₂ kg', v:138, c:'#1B6CA8' }],
-    max:95000,
-    collected:76200, target:95000, cUnit:'M³', cLabel:'Water treated',
+    label:'this month',
+    xl:['W1','W2','W3','W4','W5'],
+    hrs:[98.4, 112.7, 129.5, 141.2, 147.7],
+    max:70000,
+    releases:61,
     series:[
-      { name:'Water temp', unit:'°C', color:'#F0A32E', pts:[17.2,18.6,19.9,21.2,22.4,23.6,24.6] },
-      { name:'Bloom risk', unit:'score', color:'#1B6CA8', pts:[22,29,35,44,51,63,74] }
+      { name:'Dissolved O₂', unit:'mg/L', color:'#1B6CA8', pts:[5.6,6.0,6.6,7.1,7.7] },
+      { name:'Chlorophyll-a', unit:'µg/L', color:'#3FA34D', pts:[47,42,36,30,24] }
     ],
-    xl:['W1','W2','W3','W4','W5','W6','W7'],
-    kpis:[['Aeration','182 h'],['Samples','42,760'],['Peak risk','88']]
+    kpis:[['Peak risk','88'],['Samples','42,760'],['Uptime','98.4%']]
   },
   yearly:{
-    title:['Yearly','Summary'],
-    bars:[{ l:'Water treated m³', v:612000, c:'#3FB6D3' },{ l:'Releases', v:148, c:'#7A5AD1' },{ l:'O₂ kg', v:1104, c:'#1B6CA8' }],
-    max:750000,
-    collected:612000, target:750000, cUnit:'M³', cLabel:'Water treated',
+    label:'this year',
+    xl:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+    hrs:[18, 22, 41, 88, 186, 402, 588, 629, 476, 214, 62, 24],
+    max:280000,
+    releases:243,
     series:[
-      { name:'Water temp', unit:'°C', color:'#F0A32E', pts:[4.1,7.8,13.2,19.4,24.6,18.1,9.2] },
-      { name:'Bloom risk', unit:'score', color:'#1B6CA8', pts:[9,14,31,58,74,49,18] }
+      /* cold water holds more oxygen, so DO is highest in winter and
+         bottoms out in the bloom months */
+      { name:'Dissolved O₂', unit:'mg/L', color:'#1B6CA8', pts:[11.2,11.0,10.4,9.3,8.1,7.0,6.2,6.6,7.4,8.8,10.1,11.0] },
+      { name:'Chlorophyll-a', unit:'µg/L', color:'#3FA34D', pts:[4,5,9,16,28,41,52,47,33,18,8,5] }
     ],
-    xl:['Jan','Mar','May','Jul','Aug','Oct','Dec'],
-    kpis:[['Aeration','1,455 h'],['Samples','512k'],['Peak risk','91']]
+    kpis:[['Peak risk','91'],['Samples','512k'],['Uptime','97.1%']]
   }
 };
 

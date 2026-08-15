@@ -96,6 +96,13 @@ function sparkline(arr, color, w, h){
   </svg>`;
 }
 
+/* Axis labels have ~24px of gutter, so long counts need shortening. */
+function compactNum(v){
+  if (v >= 1000000) return +(v / 1000000).toFixed(1) + 'M';
+  if (v >= 1000)    return +(v / 1000).toFixed(v < 10000 ? 1 : 0) + 'k';
+  return String(Math.round(v));
+}
+
 function barChart(bars, max){
   const W = 300, H = 150, padL = 30, padB = 22, padT = 6;
   const iw = W - padL - 6, ih = H - padB - padT;
@@ -105,7 +112,7 @@ function barChart(bars, max){
   for (let i = 0; i <= 5; i++){
     const y = padT + ih - (ih / 5) * i;
     g += `<line class="grid-l" x1="${padL}" y1="${y}" x2="${W - 6}" y2="${y}"/>
-          <text class="axis-txt" x="${padL - 6}" y="${y + 3}" text-anchor="end">${Math.round(max / 5 * i)}</text>`;
+          <text class="axis-txt" x="${padL - 6}" y="${y + 3}" text-anchor="end">${compactNum(max / 5 * i)}</text>`;
   }
   const b = bars.map((d, i) => {
     const hgt = Math.max(2, (d.v / max) * ih);
@@ -423,6 +430,9 @@ function fleetStats(){
   };
 }
 
+/* What one bar covers, per range. */
+const PERIOD_BUCKET = { daily:'4-hour block', weekly:'day', monthly:'week', yearly:'month' };
+
 const NB_STATE = {
   active:  { label:'Releasing', badge:'b-green', color:'#3FA34D' },
   idle:    { label:'Standby',   badge:'b-blue',  color:'#1B6CA8' },
@@ -432,6 +442,13 @@ const NB_STATE = {
 function ScreenAnalytics(){
   const s = BB.SUMMARY[state.range];
   const t = fleetStats();
+
+  /* Everything below derives from aeration hours, so the headline
+     number, the bar chart and the breakdown card cannot disagree. */
+  const hours   = s.hrs.reduce((a, h) => a + h, 0);
+  const water   = hours * BB.NB_FLOW;
+  const oxygen  = hours * BB.NB_O2_RATE;
+  const perBucket = s.hrs.map((h, i) => ({ l:s.xl[i], v:h * BB.NB_FLOW, c:'#3FB6D3' }));
 
   /* least aeration headroom first — that is the list you act on */
   const byRuntime = BB.FLEET.slice().sort((a, b) => b.runtime - a.runtime);
@@ -467,7 +484,7 @@ function ScreenAnalytics(){
       </div>
       <div class="kv" style="margin-top:10px"><span>Aeration run today</span><b>${t.runtime.toFixed(1)} h</b></div>
       <div class="kv"><span>Oxygen dispersed</span><b>${t.o2.toFixed(1)} kg</b></div>
-      <div class="kv"><span>Treated this ${state.range.replace('ly','')}</span><b>${s.collected.toLocaleString()} m³</b></div>
+      <div class="kv"><span>Treated ${s.label}</span><b>${Math.round(water).toLocaleString()} m³</b></div>
     </div>
 
     <!-- oxygen recovery: the point of the intervention -->
@@ -566,13 +583,24 @@ function ScreenAnalytics(){
       }).join('')}
     </div>
 
-    <!-- period activity -->
-    <div class="sec-label">${state.range[0].toUpperCase() + state.range.slice(1)} activity</div>
-    <div class="chartbox">${barChart(s.bars, s.max)}</div>
+    <!-- water treated across the period -->
+    <div class="sec-label">Water treated ${s.label}</div>
+    <p class="sec-note">Cubic metres aerated per ${PERIOD_BUCKET[state.range]}.</p>
+    <div class="chartbox">${barChart(perBucket, s.max)}</div>
+
+    <!-- indicator trend across the period -->
+    <div class="sec-label">Indicator trend</div>
+    <div class="legend">
+      ${s.series.map(x => `<span><i style="background:${x.color}"></i>${esc(x.name)} <em>${esc(x.unit)}</em></span>`).join('')}
+    </div>
+    <div class="chartbox">${lineChart(s.series, s.xl)}</div>
+
     <div class="card card--pad">
       <div class="card__title"><h3>In-situ breakdown</h3><span>no collection</span></div>
-      <div class="kv"><span>Oxygen dispersed</span><b>${s.bars[2].v.toLocaleString()} kg</b></div>
-      <div class="kv"><span>Releases fired</span><b>${s.bars[1].v}</b></div>
+      <div class="kv"><span>Aeration run</span><b>${hours.toFixed(1)} h</b></div>
+      <div class="kv"><span>Water treated</span><b>${Math.round(water).toLocaleString()} m³</b></div>
+      <div class="kv"><span>Oxygen dispersed</span><b>${oxygen.toFixed(1)} kg</b></div>
+      <div class="kv"><span>Releases fired</span><b>${s.releases}</b></div>
       <div class="kv"><span>Biomass removed to shore</span><b>0 kg</b></div>
       ${s.kpis.map(([k, v]) => `<div class="kv"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}
     </div>
