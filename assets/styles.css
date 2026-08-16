@@ -589,6 +589,14 @@ kbd{
 
 /* political boundaries — dashed hairline, deliberately quieter than
    the coastline so country shapes read without competing with it */
+.wm-lakes{
+  fill:#BCDCEC;stroke:#8FBBD2;stroke-width:.6;stroke-linejoin:round;
+  vector-effect:non-scaling-stroke;pointer-events:none;
+}
+.wm-admin{
+  fill:none;stroke:#B9A98C;stroke-width:.5;stroke-linecap:round;stroke-linejoin:round;
+  vector-effect:non-scaling-stroke;pointer-events:none;
+}
 .wm-borders{
   fill:none;stroke:#A9A483;stroke-width:.8;opacity:.75;
   stroke-dasharray:3 2.2;stroke-linecap:round;stroke-linejoin:round;

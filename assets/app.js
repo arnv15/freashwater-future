@@ -790,6 +790,11 @@ function worldMap(rows){
       <path class="wm-shelf wm-shelf--2" d="${geo.land}"/>
       <path class="wm-shelf wm-shelf--1" d="${geo.land}"/>
       <path class="wm-landp" d="${geo.land}" fill-rule="evenodd"/>
+      <!-- lakes sit on top of land so shorelines read correctly -->
+      <path class="wm-lakes" d="${BB.LAKES_PATH}"/>
+
+      <!-- state / province lines: pre-projected, faded in by zoom -->
+      <path class="wm-admin" id="wmAdmin" d="${BB.ADMIN1_PATH}"/>
       <path class="wm-borders" d="${geo.borders}"/>
 
       <g id="wmPins"></g>
@@ -837,6 +842,15 @@ function applyMapView(force, tries){
   const win = mapWindow(rect);
   svg.setAttribute('viewBox',
     `${win.x.toFixed(3)} ${win.y.toFixed(3)} ${win.w.toFixed(3)} ${win.h.toFixed(3)}`);
+  /* State lines are noise on a whole-world view and only start to mean
+     something once countries fill the screen, so fade them in with zoom. */
+  const admin = $('#wmAdmin');
+  if (admin){
+    const o = clamp((state.map.zoom - 1.6) / 1.4, 0, 1);
+    admin.style.opacity = o.toFixed(2);
+    admin.style.display = o > 0.02 ? '' : 'none';
+  }
+
   /* re-lay markers only when the scale actually changed — panning is free */
   if (force || Math.abs(win.scale - lastPinScale) > 1e-4){
     lastPinScale = win.scale;
