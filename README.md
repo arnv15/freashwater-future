@@ -1,10 +1,10 @@
 # freashwater-future
 
-**Freshwater Future Tracker** — the companion web app for **BloomGuard**, an autonomous solar buoy that
+**Algae Guard** — the companion web app for the Algae Guard autonomous solar buoy, which
 detects harmful algal blooms before they are visible and releases nanobubbles that lyse the
 algae and reoxygenate the water. Nothing is skimmed and nothing is hauled ashore.
 
-Built for the Oxford Climate Challenge (Freshwater Futures). The app runs in a simulated iPhone
+Built for the Oxford Climate Challenge. The app runs in a simulated iPhone
 frame on desktop and full-bleed on a real phone.
 
 ## Run it
@@ -15,7 +15,7 @@ No build step, no dependencies. Serve the folder over HTTP:
 python3 -m http.server 8099
 ```
 
-Then open <http://localhost:8099>. Any email + password logs you in.
+Then open <http://localhost:8099>. There is no sign-in — it opens straight onto the fleet map.
 
 > Opening `index.html` directly via `file://` will not work — browsers block the module scripts.
 
@@ -27,7 +27,6 @@ carry a `?v=` query — bump it after editing anything in `assets/`, and hard-re
 
 | Screen | What it does |
 | --- | --- |
-| **Login** | Matches the original mockup: logo, credentials, white sheet with Login / Create account. |
 | **Home** | Full-screen zoomable world map of the fleet; tap any buoy for a detail sheet. |
 | **Live Sensor Dashboard** | Real-time pH / DO / AVOC / temp / chlorophyll-a / phycocyanin / turbidity / nitrate / phosphate, a bloom-risk gauge, and a breakdown of which channels are driving the score. |
 | **Analytics** | Daily / Weekly / Monthly / Yearly summary, algae-collected progress, dual trend chart, resource-recovery totals. |
@@ -52,13 +51,12 @@ carry a `?v=` query — bump it after editing anything in `assets/`, and hard-re
 
 ## Demo script
 
-1. Log in.
-2. Go to **Live Sensors**.
-3. Press <kbd>D</kbd> to switch to fast demo speed.
-4. Tap **Simulate bloom** — nutrient and biomass channels start climbing.
-5. Around risk 65 the threshold alert fires, a push banner appears, and (because auto-release is on)
+1. Go to **Live Sensors**.
+2. Press <kbd>D</kbd> to switch to fast demo speed.
+3. Tap **Simulate bloom** — nutrient and biomass channels start climbing.
+4. Around risk 65 the threshold alert fires, a push banner appears, and (because auto-release is on)
    a nanobubble release starts automatically and is logged.
-6. Watch the score fall back as lysis takes effect and dissolved oxygen climbs, then open
+5. Watch the score fall back as lysis takes effect and dissolved oxygen climbs, then open
    **Release Log** to see the new entry.
 
 Keyboard: <kbd>←</kbd> / <kbd>→</kbd> move between tabs, <kbd>D</kbd> toggles demo speed,

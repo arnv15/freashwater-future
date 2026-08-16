@@ -1,5 +1,5 @@
 /* ============================================================
-   Freshwater Future Tracker — app shell, screens, live simulation
+   Algae Guard — app shell, screens, live simulation
    ============================================================ */
 (function () {
 'use strict';
@@ -17,7 +17,6 @@ const ic  = (id, cls) => `<svg class="${cls||''}" viewBox="0 0 24 24"><use href=
    STATE
    ============================================================ */
 const state = {
-  auth:false,
   user:{ name:'Field Ops', email:'ops@toledowater.gov', org:'Toledo Water Authority' },
   screen:'home',
   buoyId:'BG-014',
@@ -222,47 +221,6 @@ function barPlain(title, backTo){
     <span class="appbar__title">${esc(title)}</span>
     <button class="appbar__btn" data-action="open-drawer" aria-label="Menu">${ic('ic-menu')}</button>
   </header>`;
-}
-
-/* ============================================================
-   SCREEN — LOGIN
-   ============================================================ */
-function ScreenLogin(){
-  return `<div class="login">
-    <svg class="login__waves" viewBox="0 0 400 800" preserveAspectRatio="none" aria-hidden="true">
-      <path d="M-20 620 C 90 570 150 690 260 640 S 420 590 440 630 L440 820 L-20 820Z" fill="rgba(127,216,232,.10)"/>
-      <path d="M-20 680 C 80 640 170 740 280 690 S 420 660 440 690 L440 820 L-20 820Z" fill="rgba(127,216,232,.08)"/>
-      <path d="M-20 120 C 60 80 120 170 210 130 S 380 70 440 110" fill="none" stroke="rgba(127,216,232,.22)" stroke-width="2"/>
-    </svg>
-    <div class="login__dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
-
-    <div class="login__top">
-      <svg class="login__logo" viewBox="0 0 120 120"><use href="#logo-mark"/></svg>
-      <h1 class="login__title">Freshwater<span>Future</span></h1>
-      <p class="login__sub">Tracker App</p>
-
-      <form class="login__fields" id="loginForm" autocomplete="on">
-        <label class="ifield">
-          ${ic('ic-mail')}
-          <input id="fEmail" type="text" placeholder="Email or Phone" value="ops@toledowater.gov"
-                 autocomplete="username" spellcheck="false" />
-        </label>
-        <label class="ifield">
-          ${ic('ic-lock')}
-          <input id="fPass" type="password" placeholder="Password" value="bloomguard"
-                 autocomplete="current-password" />
-        </label>
-        <div class="login__err" id="loginErr"></div>
-      </form>
-    </div>
-
-    <div class="login__sheet">
-      <div class="login__forgot">Forgot Password?</div>
-      <button class="btn btn--primary btn--block" data-action="login">Login</button>
-      <div class="or">or</div>
-      <button class="btn btn--ghost btn--block" data-action="login">Create an account</button>
-    </div>
-  </div>`;
 }
 
 /* ============================================================
@@ -718,7 +676,7 @@ function pinsMarkup(rows, s){
         ${sel ? `<circle class="wm-ring" r="12" fill="none" stroke="${p.band.color}" stroke-width="1.6" opacity=".9"/>` : ''}
         ${showLabels ? `<text class="wm-label" x="13" y="4.6" paint-order="stroke"
               stroke="#F4FAFD" stroke-width="3.4" stroke-linejoin="round">${esc(p.name)}</text>` : ''}
-        <circle r="14" fill="transparent"/>
+        <circle r="22" fill="transparent"/>   <!-- 44px touch target -->
       </g>
     </g>`;
   }).join('');
@@ -916,12 +874,21 @@ function initMap(rows){
   applyMapView(true);
 
   const pointers = new Map();
-  let panning = false, moved = 0, lastX = 0, lastY = 0, pinchDist = 0;
+  /* Drag detection measures NET displacement from where the finger landed.
+     Summing per-move distance instead counts the jitter of a stationary
+     finger, so an ordinary tap crosses the threshold and gets thrown away
+     as a drag — invisible with a mouse, which emits no move events. */
+  const TAP_SLOP = 10;
+  let panning = false, dragged = false;
+  let startX = 0, startY = 0, lastX = 0, lastY = 0, pinchDist = 0;
 
   svg.addEventListener('pointerdown', e => {
     pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
     svg.setPointerCapture(e.pointerId);
-    if (pointers.size === 1){ panning = true; moved = 0; lastX = e.clientX; lastY = e.clientY; }
+    if (pointers.size === 1){
+      panning = true; dragged = false;
+      startX = lastX = e.clientX; startY = lastY = e.clientY;
+    }
     if (pointers.size === 2){
       panning = false;
       const [a, b] = Array.from(pointers.values());
@@ -938,7 +905,7 @@ function initMap(rows){
       const d = Math.hypot(b.x - a.x, b.y - a.y);
       if (pinchDist > 0 && d > 0){
         zoomBy(d / pinchDist, (a.x + b.x) / 2, (a.y + b.y) / 2);
-        moved += Math.abs(d - pinchDist);
+        dragged = true;   /* a pinch is a gesture, never a tap */
       }
       pinchDist = d;
       return;
@@ -948,7 +915,7 @@ function initMap(rows){
     const rect = wrap.getBoundingClientRect();
     const win = mapWindow(rect);
     const dx = e.clientX - lastX, dy = e.clientY - lastY;
-    moved += Math.abs(dx) + Math.abs(dy);
+    if (Math.hypot(e.clientX - startX, e.clientY - startY) > TAP_SLOP) dragged = true;
     state.map.cx -= dx * win.w / rect.width;
     state.map.cy -= dy * win.h / rect.height;
     lastX = e.clientX; lastY = e.clientY;
@@ -961,7 +928,7 @@ function initMap(rows){
     if (pointers.size === 0){
       panning = false;
       /* a drag must not also register as a tap on a marker */
-      if (moved > 6){ svg.dataset.dragged = '1'; setTimeout(() => { delete svg.dataset.dragged; }, 0); }
+      if (dragged){ svg.dataset.dragged = '1'; setTimeout(() => { delete svg.dataset.dragged; }, 0); }
     }
   };
   svg.addEventListener('pointerup', release);
@@ -1224,12 +1191,10 @@ function ScreenProfile(){
       <div class="kv"><span>Organisation</span><b>${esc(state.user.org)}</b></div>
       <div class="kv"><span>Role</span><b>Operations lead</b></div>
       <div class="kv"><span>Fleet access</span><b>All ${BB.FLEET.length} buoys</b></div>
-      <div class="kv"><span>App version</span><b>Freshwater Future 1.0</b></div>
+      <div class="kv"><span>App version</span><b>Algae Guard 1.0</b></div>
     </div>
 
-    <div class="btnrow" style="grid-template-columns:1fr">
-      <button class="actionbtn" data-action="logout" style="color:#A81E1E">Sign out</button>
-    </div>`;
+`;
 
   return shell(barPlain('Profile'), body, 'profile');
 }
@@ -1245,13 +1210,6 @@ const SCREENS = {
 const TAB_ORDER = ['home','analytics','profile'];
 
 function render(){
-  if (!state.auth){
-    screenEl.classList.add('sb-light');
-    screenEl.classList.remove('sb-brand');
-    app.innerHTML = ScreenLogin();
-    return;
-  }
-  screenEl.classList.remove('sb-light');
   screenEl.classList.remove('sb-brand');
   app.innerHTML = (SCREENS[state.screen] || ScreenHome)();
   const v = $('#view'); if (v) v.scrollTop = 0;
@@ -1276,7 +1234,6 @@ function go(scr){
    LIVE PATCHING  (no full re-render, so scroll + focus survive)
    ============================================================ */
 function updateLive(){
-  if (!state.auth) return;
   const risk = riskOf(), band = BB.riskBand(risk);
 
   $$('[data-live="risk-num"]').forEach(el => { el.textContent = risk; });
@@ -1442,7 +1399,7 @@ function pushNotify(title, body, goto){
   el.innerHTML = `
     <span class="push__app"><svg viewBox="0 0 120 120"><use href="#logo-mark"/></svg></span>
     <div>
-      <div class="push__head"><b>Freshwater Future Tracker</b><time>now</time></div>
+      <div class="push__head"><b>Algae Guard</b><time>now</time></div>
       <p>${esc(title)}<br><span style="color:var(--muted)">${esc(body)}</span></p>
     </div>`;
   if (goto) el.addEventListener('click', () => { go(goto); dismiss(el); });
@@ -1456,7 +1413,7 @@ function pushNotify(title, body, goto){
   /* mirror to the OS if the user has granted permission */
   try {
     if ('Notification' in window && Notification.permission === 'granted'){
-      new Notification('Freshwater Future Tracker — ' + title, { body: body, tag: 'freshwater-future' });
+      new Notification('Algae Guard — ' + title, { body: body, tag: 'algae-guard' });
     }
   } catch (e) { /* notifications unavailable — the in-app banner still shows */ }
 }
@@ -1646,36 +1603,15 @@ function openDrawer(){
 }
 function closeDrawer(){ drawer.hidden = true; }
 
-function login(){
-  const email = ($('#fEmail') || {}).value || '';
-  const pass  = ($('#fPass')  || {}).value || '';
-  const err   = $('#loginErr');
-  if (!email.trim() || !pass.trim()){
-    if (err) err.textContent = 'Enter an email or phone and a password to continue.';
-    return;
-  }
-  state.user.email = email.trim();
-  state.user.name  = email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Field Ops';
-  state.auth = true;
-  state.screen = 'home';
-  render();
-  /* ask once, politely, so the threshold alert can reach the OS */
-  try {
-    if ('Notification' in window && Notification.permission === 'default'){
-      Notification.requestPermission().catch(() => {});
-    }
-  } catch (e) {}
+/* No sign-in: the app opens straight onto the fleet map. The operator
+   identity below is fixed rather than authenticated — this is a
+   prototype over a simulated feed, not a real account system. */
+function greet(){
   setTimeout(() => {
     pushNotify('Connected to ' + buoy().name,
-      'BG-014 streaming 9 channels. Bloom risk ' + riskOf() + ' and rising — watching your threshold of ' + state.thresholds.risk + '.', 'sensors');
-  }, 1400);
-}
-
-function logout(){
-  state.auth = false;
-  closeDrawer();
-  pushwrap.innerHTML = '';
-  render();
+      buoy().id + ' streaming 9 channels. Bloom risk ' + riskOf() +
+      ' — watching your threshold of ' + state.thresholds.risk + '.', 'sensors');
+  }, 1200);
 }
 
 /* ============================================================
@@ -1745,8 +1681,6 @@ document.addEventListener('click', e => {
   const act = actEl.getAttribute('data-action');
 
   switch (act){
-    case 'login':        login(); break;
-    case 'logout':       logout(); break;
     case 'open-drawer':  openDrawer(); break;
     case 'close-drawer': closeDrawer(); break;
     case 'close-sheet':  closeSheet(); break;
@@ -1800,10 +1734,8 @@ document.addEventListener('input', e => {
   if (k === 'doFloor'){ const o = $('#thDoVal'); if (o) o.textContent = state.thresholds.doFloor.toFixed(1) + ' mg/L'; }
 });
 
-/* enter-to-login */
+/* keyboard shortcuts */
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !state.auth){ e.preventDefault(); login(); return; }
-  if (!state.auth) return;
   /* the event target is not always an Element (document, window) */
   const tgt = e.target;
   if (tgt && typeof tgt.matches === 'function' && tgt.matches('input')) return;
@@ -1831,7 +1763,7 @@ document.addEventListener('keydown', e => {
 
 /* aside shortcuts on the desktop stage */
 $$('[data-goto]', $('.stage__aside')).forEach(el => {
-  el.addEventListener('click', () => { if (state.auth) go(el.getAttribute('data-goto')); });
+  el.addEventListener('click', () => go(el.getAttribute('data-goto')));
 });
 
 /* ============================================================
@@ -1847,5 +1779,6 @@ clock(); setInterval(clock, 10000);
 
 render();
 startSim();
+greet();
 
 })();

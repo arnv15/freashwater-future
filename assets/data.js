@@ -1,8 +1,8 @@
 /* ============================================================
-   Freshwater Future Tracker — domain data + sensor simulation
+   Algae Guard — domain data + sensor simulation
    ------------------------------------------------------------
-   Everything here models the BloomGuard buoy described in the
-   Freshwater Futures brainstorm:
+   Everything here models the Algae Guard buoy described in the
+   project brainstorm:
      · sensor suite  : pH, DO, temp, turbidity, nitrate, phosphate,
                        chlorophyll-a / phycocyanin fluorometer, AVOCs
      · prediction    : gradient-boosted bloom-risk score (0-100)
